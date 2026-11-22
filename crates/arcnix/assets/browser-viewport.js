@@ -32,7 +32,7 @@ function observeNativeSurface(app) {
 
     function syncWindow(browser, bridge, next) {
         const surface = browser.querySelector(app === 'player' ? '.remote-player-screen' : '.browser-surface');
-        const commandButton = app === 'code' ? browser.querySelector('.code-quick-open') : null;
+        const commandButton = nativeSurfaceRegionClipping && app === 'code' ? browser.querySelector('.code-quick-open') : null;
         const menuSlot = app === 'code' ? browser.querySelector('.code-menu-slot') : null;
         const canvas = browser.closest('.desktop-canvas');
         const layer = browser.closest('.desktop-window-layer');
