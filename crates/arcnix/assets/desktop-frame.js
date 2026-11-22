@@ -83,3 +83,15 @@ const desktopFrame = (() => {
 
     return {boundsFor, workArea};
 })();
+
+// Let a mouse click retract the unpinned bar even while it is still hovered.
+document.addEventListener('pointerdown', event => {
+    if (!event.isPrimary || event.button !== 0) return;
+    const pin = event.target.closest?.('.desktop-menubar-pin[aria-pressed="true"]');
+    if (pin) pin.closest('.desktop-menubar-overlay').setAttribute('data-retracting', '');
+}, true);
+document.addEventListener('pointermove', event => {
+    if (!event.target.closest?.('.desktop-menubar')) {
+        document.querySelector('.desktop-menubar-overlay[data-retracting]')?.removeAttribute('data-retracting');
+    }
+});

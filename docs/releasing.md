@@ -11,7 +11,7 @@ desktop with GTK/WebKit dependencies, before a release tag is created.
 
 | Platform | Native runner | Rust target | Downloads |
 | --- | --- | --- | --- |
-| macOS ARM64 | `macos-15` | `aarch64-apple-darwin` | `arcnix-vVERSION-macos-arm64.tar.gz` |
+| macOS ARM64 | `macos-15` | `aarch64-apple-darwin` | `arcnix-vVERSION-macos-arm64.dmg` |
 | Windows AMD64 | `windows-2025` | `x86_64-pc-windows-msvc` | `arcnix-vVERSION-windows-amd64-setup.exe` (installer), `arcnix-vVERSION-windows-amd64.zip` (portable) |
 | Linux ARM64 | `ubuntu-24.04-arm` | `aarch64-unknown-linux-gnu` | `arcnix-vVERSION-linux-arm64.tar.gz` |
 | Linux AMD64 | `ubuntu-24.04` | `x86_64-unknown-linux-gnu` | `arcnix-vVERSION-linux-amd64.tar.gz` |
@@ -24,6 +24,10 @@ on the existing release. GitHub assets do not depend on crates.io publication.
 
 `tools/package_release.py` reads Cargo metadata to locate the actual workspace
 target directory. It does not change Cargo home, the build directory or TEMP.
+
+macOS packaging uses `hdiutil` to create a compressed, read-only disk image.
+Release CI mounts the image and checks the Applications shortcut, bundle
+signature and executable version with `tools/macos_dmg_smoke.sh`.
 
 Windows packaging uses Inno Setup. Local packaging requires `ISCC.exe` on `PATH`.
 On first install, the wizard offers “Install for me only” (default,
@@ -87,7 +91,7 @@ configuration/WebView profiles. It never replaces the working installation.
 - **Windows:** MSVC build tools, native Windows Perl and NASM for building;
   Inno Setup for packaging and WebView2 Runtime for running.
 - **macOS:** Xcode Command Line Tools for building; macOS 13+ on Apple Silicon
-  for running. Extract and move `Arcnix.app` to Applications. CI creates an ad-hoc
+  for running. Open the DMG and drag `Arcnix.app` to Applications. CI creates an ad-hoc
   signature; the app is not Developer ID signed or notarized.
 - **Linux:** native builds on Ubuntu 24.04 with `build-essential`, `pkg-config`,
   `perl`, `libssl-dev`, `libgtk-3-dev` and `libwebkit2gtk-4.1-dev`. Archives contain
@@ -145,7 +149,7 @@ versions before retrying a partially completed upload.
 ## 发布说明
 
 - 仅推送匹配工作区版本的 `v*` tag 时运行四个平台的原生测试、release 构建和打包；普通提交、PR 和手动运行普通 CI 不运行版本构建。
-- ARM 指 ARM64；macOS 为 `.app` 压缩包，Windows 提供 `-setup.exe` 安装器和便携 ZIP，Linux 为两种架构的 tar.gz。全部成功后发布 GitHub Release 附件和 `SHA256SUMS`。
+- ARM 指 ARM64；macOS 提供 `.dmg`，打开后将 `Arcnix.app` 拖到「应用程序」。Windows 提供 `-setup.exe` 安装器和便携 ZIP，Linux 为两种架构的 tar.gz。全部成功后发布 GitHub Release 附件和 `SHA256SUMS`。
 - macOS 目前仅临时签名，未经公证；Linux 包依赖系统 GTK 3、WebKitGTK 4.1 和 glibc 2.39+。原生文件选择、剪贴板当前仍以 Windows 为实现平台。
 - crates.io 发布已通过 Actions 变量 `PUBLISH_CRATES_IO=true` 开启，设为 `false` 可暂停未来上传；GitHub 附件发布不依赖 crates.io。已有 tag 的上传被跳过时，可开启变量并单独重跑该上传任务，继续使用原提交；部分上传后重试前先核对仓库版本。
 - 已存在的 tag 不会被移动；本次配置更新不触发发布。新版本先更新版本与锁文件，普通 CI 通过后再推送新 tag。

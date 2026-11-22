@@ -875,6 +875,44 @@ fn fullscreen_action(ui: Ui, exit: bool) -> impl Widget {
         .on_press(move || ui.toggle_desktop_fullscreen())
 }
 
+fn fullscreen_bar(ui: Ui) -> impl Widget {
+    widget(move |scope| {
+        let state = ui.state;
+        let pinned = scope.cage(true);
+        let ui = ui.clone();
+        when(state.map(fullscreen), move || {
+            view().class("desktop-menubar-overlay").fill((
+                view().class("desktop-menubar-edge"),
+                row().class("desktop-menubar").fill((
+                    sapid::button()
+                        .class("icon-button desktop-menubar-pin")
+                        .name(i18n::bind("Pin fullscreen bar"))
+                        .fill(icons::glyph(Icon::Pin))
+                        .pressed(pinned)
+                        .on_press(move || pinned.revise(|pinned| *pinned = !*pinned)),
+                    text()
+                        .class("desktop-menubar-title")
+                        .content(state.map(selected_name)),
+                    workspace::transfer_progress_buttons(ui.clone()),
+                    connection_target(state),
+                    text()
+                        .class("desktop-secure")
+                        .content(i18n::desktop::bind(state.map(|s| {
+                            if s.local_desktop.is_some() {
+                                "已直连本机"
+                            } else {
+                                "SSH 已连接"
+                            }
+                            .to_owned()
+                        }))),
+                    fullscreen_action(ui.clone(), true),
+                )),
+            ))
+        })
+        .show_in(scope)
+    })
+}
+
 pub(crate) fn entry(ui: Ui, tab: Tab) -> impl Widget {
     let description = match tab {
         Tab::Desktop => "终端、资源、软件与服务，尽在服务器桌面。",
@@ -1199,7 +1237,6 @@ fn dock_clock() -> impl Widget {
 pub(crate) fn desktop(ui: Ui) -> impl Widget {
     let state = ui.state;
     let apps = ui.clone();
-    let exit_fullscreen = ui.clone();
     let geometry = ui.clone();
 
     let focus = ui.clone();
@@ -1287,22 +1324,7 @@ pub(crate) fn desktop(ui: Ui) -> impl Widget {
                 })
                 .to_string()
             })),
-            when(state.map(fullscreen), {
-                let ui = ui.clone();
-                move || {
-                    row().class("desktop-menubar").fill((
-                        text()
-                            .class("desktop-menubar-title")
-                            .content(state.map(selected_name)),
-                        workspace::transfer_progress_buttons(ui.clone()),
-                        connection_target(state),
-                        text()
-                            .class("desktop-secure")
-                            .content(i18n::desktop::bind("SSH 已连接")),
-                        fullscreen_action(exit_fullscreen.clone(), true),
-                    ))
-                }
-            }),
+            fullscreen_bar(ui.clone()),
             col()
                 .class("desktop-canvas")
                 .name(i18n::desktop::bind("Desktop"))

@@ -80,6 +80,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "ssh2",
+ "tao",
  "tempfile",
  "time",
  "webview2-com",

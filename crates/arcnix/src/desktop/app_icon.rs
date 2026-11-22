@@ -3,12 +3,17 @@ use std::collections::HashMap;
 use std::task::Waker;
 
 use glory::wry::shell::{Fullscreen, NativeLifecycle, NativeWindow, ShellError};
+#[cfg(target_os = "macos")]
+use tao::platform::macos::WindowExtMacOS;
 
 use crate::{Ui, WorkspacePage, code_native};
 
 pub(crate) struct DesktopWindow {
     ui: Ui,
+    #[cfg(not(target_os = "macos"))]
     fullscreen: bool,
+    #[cfg(target_os = "macos")]
+    previous_fullscreen: Option<Fullscreen>,
     wake: Option<Waker>,
     epoch: Option<u64>,
     code: HashMap<u64, code_native::Host>,
@@ -30,7 +35,10 @@ impl DesktopWindow {
             #[cfg(windows)]
             video: crate::mpv_native::Host::new(ui.clone()),
             ui,
+            #[cfg(not(target_os = "macos"))]
             fullscreen: false,
+            #[cfg(target_os = "macos")]
+            previous_fullscreen: None,
             wake: None,
             epoch: None,
             code: HashMap::new(),
@@ -42,6 +50,48 @@ impl DesktopWindow {
             exiting: false,
             #[cfg(windows)]
             shortcuts: Default::default(),
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn sync_fullscreen(&mut self, window: &NativeWindow, fullscreen: bool) {
+        use objc2::MainThreadMarker;
+        use objc2_app_kit::{
+            NSApplication, NSApplicationPresentationOptions, NSWindow, NSWindowStyleMask,
+        };
+
+        if !fullscreen {
+            if window.simple_fullscreen() {
+                window.set_simple_fullscreen(false);
+            }
+            if let Some(previous) = self.previous_fullscreen.take() {
+                window.set_fullscreen(Some(previous));
+            }
+            return;
+        }
+        if window.simple_fullscreen() {
+            return;
+        }
+        if let Some(previous) = window.fullscreen() {
+            if self.previous_fullscreen.is_none() {
+                self.previous_fullscreen = Some(previous);
+                window.set_fullscreen(None);
+            }
+            return;
+        }
+        // The native fullscreen exit animates after Tao clears its fullscreen state.
+        let native = unsafe { &*window.ns_window().cast::<NSWindow>() };
+        if native.styleMask().contains(NSWindowStyleMask::FullScreen) {
+            return;
+        }
+        // A titleless fullscreen window lets the desktop handle the top edge.
+        // Tao restores the window frame and previous presentation options on exit.
+        if window.set_simple_fullscreen(true) {
+            let mtm = MainThreadMarker::new().expect("native lifecycle runs on the main thread");
+            NSApplication::sharedApplication(mtm).setPresentationOptions(
+                NSApplicationPresentationOptions::HideMenuBar
+                    | NSApplicationPresentationOptions::HideDock,
+            );
         }
     }
 }
@@ -57,16 +107,18 @@ impl NativeLifecycle for DesktopWindow {
         let state = self.ui.state;
         let fullscreen = state.with(crate::server_desktop::fullscreen);
         self.ui.player.sync_surface(&self.ui);
+        #[cfg(target_os = "macos")]
+        self.sync_fullscreen(window, fullscreen);
+        #[cfg(not(target_os = "macos"))]
         if self.fullscreen != fullscreen {
             window.set_fullscreen(
                 fullscreen.then(|| Fullscreen::Borderless(window.current_monitor())),
             );
             self.fullscreen = fullscreen;
         }
-        let (epoch, live, code_open) = state.with(|s| {
+        let (epoch, code_open) = state.with(|s| {
             (
                 s.connected.then_some(s.epoch),
-                s.connected_epochs(),
                 s.workbench.apps.contains(&WorkspacePage::Code),
             )
         });
@@ -82,7 +134,15 @@ impl NativeLifecycle for DesktopWindow {
             }
             self.epoch = epoch;
         }
-        self.code.retain(|epoch, _| live.contains(epoch));
+        // Code remains available in read-only sessions where Terminal is disabled.
+        state.with(|s| {
+            self.code.retain(|&id, _| {
+                epoch == Some(id)
+                    || s.parked
+                        .values()
+                        .any(|session| session.connected && session.epoch == id)
+            });
+        });
         if let Some(epoch) = epoch {
             if code_open {
                 self.code
@@ -107,6 +167,7 @@ impl NativeLifecycle for DesktopWindow {
                     .values_mut()
                     .all(|browser| browser.exit_ready()));
             }
+            let live = state.with(|s| s.connected_epochs());
             self.browsers.retain(|epoch, _| live.contains(epoch));
             if let Some(epoch) = epoch {
                 if state
@@ -139,6 +200,10 @@ impl NativeLifecycle for DesktopWindow {
     }
 
     fn closed(&mut self, _window: &NativeWindow) {
+        #[cfg(target_os = "macos")]
+        if _window.simple_fullscreen() {
+            _window.set_simple_fullscreen(false);
+        }
         #[cfg(windows)]
         for browser in self.browsers.values_mut() {
             browser.close();

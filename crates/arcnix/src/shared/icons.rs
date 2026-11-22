@@ -75,6 +75,7 @@ icons! {
     StarFilled => "star-filled";
     Fullscreen => "fullscreen";
     ExitFullscreen => "exit-fullscreen";
+    Pin => "pin";
     Docker => "docker", "docker";
     Disks => "disks", "disks";
     Monitor => "monitor", "monitor";

@@ -92,6 +92,9 @@ jobs:
           else
             python3 tools/package_release.py --target '${{ matrix.target }}' --tag "$GITHUB_REF_NAME"
           fi
+      - name: Test macOS disk image
+        if: runner.os == 'macOS'
+        run: bash tools/macos_dmg_smoke.sh "dist/arcnix-$GITHUB_REF_NAME-macos-arm64.dmg" "$GITHUB_REF_NAME"
       - name: Test Windows installer
         if: runner.os == 'Windows'
         shell: pwsh
@@ -124,24 +127,22 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          shopt -s nullglob
           cd dist
           tag="$GITHUB_REF_NAME"
-          archives=(arcnix-"$tag"-*.tar.gz)
-          test "${#archives[@]}" -eq 3
           stem="arcnix-$tag-windows-amd64"
           setup="$stem-setup.exe"
           portable="$stem.zip"
-          sha256sum "$setup" "$portable" "${archives[@]}" > SHA256SUMS
+          dmg="arcnix-$tag-macos-arm64.dmg"
+          linux=("arcnix-$tag-linux-amd64.tar.gz" "arcnix-$tag-linux-arm64.tar.gz")
+          sha256sum "$setup" "$portable" "$dmg" "${linux[@]}" > SHA256SUMS
           assets=("$setup#Windows x64 installer ($tag)" "$portable#Windows x64 portable ZIP ($tag)"
-                  "${archives[@]}" SHA256SUMS)
+                  "$dmg#macOS Apple Silicon disk image ($tag)" "${linux[@]}" SHA256SUMS)
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" "${assets[@]}" --clobber
           else
-            flags=()
+            flags=(--verify-tag --title "Arcnix $tag" --generate-notes)
             if [[ "$tag" == *-* ]]; then flags+=(--prerelease); fi
-            gh release create "$tag" "${assets[@]}" \
-              --verify-tag --title "Arcnix $tag" --generate-notes "${flags[@]}"
+            gh release create "$tag" "${assets[@]}" "${flags[@]}"
           fi
 
   publish:

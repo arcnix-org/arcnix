@@ -1,6 +1,6 @@
 // Dialogs open centered. Move and resize gestures share the backdrop's local coordinates.
 (() => {
-    const controls = 'button, a, input, textarea, select, label, [contenteditable], [role="button"], [role="tab"]';
+    const controls = 'button, a, input, textarea, select, label, [contenteditable], [role="button"], [role="tab"], .desktop-app-catalog-search';
     let drag;
 
     document.addEventListener('pointerdown', event => {

@@ -1912,6 +1912,7 @@ SIGKILL 会立即结束此进程，未保存的数据可能丢失。此进程的
 没有匹配的应用	No matching apps
 全屏桌面	Fullscreen desktop
 退出桌面全屏	Exit desktop fullscreen
+固定全屏状态条	Pin fullscreen bar
 Docker	Docker
 桌面设置	Desktop settings
 跟随应用	Follow application

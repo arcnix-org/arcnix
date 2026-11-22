@@ -38,8 +38,9 @@ function observeNativeSurface(app) {
         const layer = browser.closest('.desktop-window-layer');
         const frameElement = nativeSurfaceRegionClipping ? canvas : layer;
         const dock = nativeSurfaceRegionClipping ? canvas.querySelector('.desktop-dock-zone') : null;
+        const menubar = canvas.parentElement.querySelector('.desktop-menubar');
         const windows = Array.from(layer.querySelectorAll('.desktop-window:not(.hidden)'));
-        for (const node of [surface, commandButton, menuSlot, frameElement, dock, ...windows]) if (node) next.add(node);
+        for (const node of [surface, commandButton, menuSlot, frameElement, dock, menubar, ...windows]) if (node) next.add(node);
         const visibleFrame = rect(frameElement);
         const surfaceBox = rect(surface);
         const area = visibleFrame && surfaceBox && !browser.closest('[inert]')
@@ -52,7 +53,7 @@ function observeNativeSurface(app) {
         const overlays = canvas.querySelectorAll(
             '.file-context-menu,.file-actions-menu,.terminal-context-menu,.desktop-context-menu,.desktop-icon-menu,.sapid-tooltip,.desktop-clock-tooltip,.window-tabs-menu:popover-open,.editor-menu-popup:popover-open'
         );
-        const clip = area ? [document.querySelector('.window-tab-preview'), dock, ...blockers, ...overlays].map(rect).filter(box => box
+        const clip = area ? [document.querySelector('.window-tab-preview'), menubar, dock, ...blockers, ...overlays].map(rect).filter(box => box
             && box.right > area.left && box.left < area.right && box.bottom > top && box.top < area.bottom
         ).slice(0, 32) : [];
         const epoch = Number(browser.querySelector('.browser-epoch').textContent);
@@ -64,7 +65,7 @@ function observeNativeSurface(app) {
             bridge.value = serialized;
             bridge.dispatchEvent(new Event('input', {bubbles: true}));
         }
-        if (area && windows.some(element => element.getAnimations().some(animation => animation.playState === "running"))) schedule();
+        if (area && [menubar, ...windows].some(element => element?.getAnimations().some(animation => animation.playState === 'running'))) schedule();
     }
 
     function schedule() {
@@ -73,17 +74,23 @@ function observeNativeSurface(app) {
 
     new MutationObserver(schedule).observe(document, {
         subtree: true, childList: true, attributes: true,
-        attributeFilter: ['class', 'hidden', 'inert', 'style', 'data-positioned'],
+        attributeFilter: ['class', 'hidden', 'inert', 'style', 'data-positioned', 'aria-pressed', 'data-retracting'],
     });
     addEventListener('resize', schedule);
     document.addEventListener('toggle', schedule, true);
     addEventListener('scroll', schedule, true);
-    function clockHover(event) {
+    function overlayHover(event) {
         const clock = event.target.closest?.('.desktop-dock .desktop-panel-clock');
-        if (clock && event.relatedTarget?.closest?.('.desktop-panel-clock') !== clock) schedule();
+        if (event.target.closest?.('.desktop-menubar-overlay') ||
+            (clock && event.relatedTarget?.closest?.('.desktop-panel-clock') !== clock)) schedule();
     }
-    document.addEventListener('pointerover', clockHover, true);
-    document.addEventListener('pointerout', clockHover, true);
+    document.addEventListener('pointerover', overlayHover, true);
+    document.addEventListener('pointerout', overlayHover, true);
+    for (const event of ['focusin', 'focusout', 'transitionrun']) {
+        document.addEventListener(event, e => {
+            if (e.target.closest?.('.desktop-menubar')) schedule();
+        }, true);
+    }
     schedule();
 }
 observeNativeSurface('browser');

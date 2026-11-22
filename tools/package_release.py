@@ -71,6 +71,17 @@ def archive_permissions(info):
     return info
 
 
+def macos_disk_image(staging, archive):
+    (staging / "Applications").symlink_to("/Applications", target_is_directory=True)
+    with tempfile.TemporaryDirectory(prefix=".arcnix-dmg-", dir=archive.parent) as temporary:
+        image = Path(temporary) / archive.name
+        subprocess.run([
+            "hdiutil", "create", "-volname", "Arcnix", "-fs", "HFS+",
+            "-format", "UDZO", "-srcfolder", str(staging), str(image),
+        ], check=True)
+        image.replace(archive)
+
+
 def windows_installer(staging, output, stem, version):
     compiler = shutil.which("ISCC.exe")
     if not compiler:
@@ -112,7 +123,10 @@ def package(binary, target, tag, output, version):
         shutil.copytree(vendor / "workbench", staging / "LICENSES/workbench",
                         ignore=shutil.ignore_patterns("workbench.gz"))
         shutil.copy2(vendor / "README.md", staging / "LICENSES/README.md")
-        if platform == "windows-amd64":
+        if platform == "macos-arm64":
+            archive = output / f"{stem}.dmg"
+            macos_disk_image(staging, archive)
+        elif platform == "windows-amd64":
             stage_libmpv(staging)
             # All Windows distributions use the identical self-contained executable.
             # ZIP supports a PE prefix, so the normal updater can replace one file.
