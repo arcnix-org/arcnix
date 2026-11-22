@@ -1,8 +1,17 @@
 //! Native window presentation for the server desktop.
 use std::collections::HashMap;
+#[cfg(target_os = "macos")]
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use std::task::Waker;
 
 use glory::wry::shell::{Fullscreen, NativeLifecycle, NativeWindow, ShellError};
+#[cfg(target_os = "macos")]
+use objc2::{rc::Retained, runtime::ProtocolObject};
+#[cfg(target_os = "macos")]
+use objc2_foundation::{NSNotificationCenter, NSObjectProtocol};
 #[cfg(target_os = "macos")]
 use tao::platform::macos::WindowExtMacOS;
 
@@ -13,7 +22,7 @@ pub(crate) struct DesktopWindow {
     #[cfg(not(target_os = "macos"))]
     fullscreen: bool,
     #[cfg(target_os = "macos")]
-    previous_fullscreen: Option<Fullscreen>,
+    previous_fullscreen: Option<NativeFullscreenExit>,
     wake: Option<Waker>,
     epoch: Option<u64>,
     code: HashMap<u64, code_native::Host>,
@@ -56,16 +65,21 @@ impl DesktopWindow {
     #[cfg(target_os = "macos")]
     fn sync_fullscreen(&mut self, window: &NativeWindow, fullscreen: bool) {
         use objc2::MainThreadMarker;
-        use objc2_app_kit::{
-            NSApplication, NSApplicationPresentationOptions, NSWindow, NSWindowStyleMask,
-        };
+        use objc2_app_kit::{NSApplication, NSApplicationPresentationOptions};
 
+        if self
+            .previous_fullscreen
+            .as_ref()
+            .is_some_and(|exit| !exit.finished.load(Ordering::Acquire))
+        {
+            return;
+        }
         if !fullscreen {
             if window.simple_fullscreen() {
                 window.set_simple_fullscreen(false);
             }
             if let Some(previous) = self.previous_fullscreen.take() {
-                window.set_fullscreen(Some(previous));
+                window.set_fullscreen(Some(previous.mode.clone()));
             }
             return;
         }
@@ -74,14 +88,11 @@ impl DesktopWindow {
         }
         if let Some(previous) = window.fullscreen() {
             if self.previous_fullscreen.is_none() {
-                self.previous_fullscreen = Some(previous);
+                let wake = self.wake.as_ref().expect("native lifecycle has opened");
+                self.previous_fullscreen =
+                    Some(NativeFullscreenExit::observe(window, previous, wake));
                 window.set_fullscreen(None);
             }
-            return;
-        }
-        // The native fullscreen exit animates after Tao clears its fullscreen state.
-        let native = unsafe { &*window.ns_window().cast::<NSWindow>() };
-        if native.styleMask().contains(NSWindowStyleMask::FullScreen) {
             return;
         }
         // A titleless fullscreen window lets the desktop handle the top edge.
@@ -93,6 +104,58 @@ impl DesktopWindow {
                     | NSApplicationPresentationOptions::HideDock,
             );
         }
+    }
+}
+
+#[cfg(target_os = "macos")]
+struct NativeFullscreenExit {
+    mode: Fullscreen,
+    finished: Arc<AtomicBool>,
+    observer: Retained<ProtocolObject<dyn NSObjectProtocol>>,
+}
+
+#[cfg(target_os = "macos")]
+impl NativeFullscreenExit {
+    fn observe(window: &NativeWindow, mode: Fullscreen, wake: &Waker) -> Self {
+        use dispatch2::DispatchQueue;
+        use objc2_app_kit::{NSWindow, NSWindowDidExitFullScreenNotification};
+        use objc2_foundation::NSNotification;
+
+        let finished = Arc::new(AtomicBool::new(false));
+        let signal = finished.clone();
+        let wake = wake.clone();
+        let callback = block2::RcBlock::new(move |_: std::ptr::NonNull<NSNotification>| {
+            let signal = signal.clone();
+            let wake = wake.clone();
+            // Let AppKit's notification delivery and Tao's queued window restoration finish.
+            DispatchQueue::main().exec_async(move || {
+                DispatchQueue::main().exec_async(move || {
+                    signal.store(true, Ordering::Release);
+                    wake.wake();
+                });
+            });
+        });
+        let observer = unsafe {
+            let native = &*window.ns_window().cast::<NSWindow>();
+            NSNotificationCenter::defaultCenter().addObserverForName_object_queue_usingBlock(
+                Some(NSWindowDidExitFullScreenNotification),
+                Some(native),
+                None,
+                &callback,
+            )
+        };
+        Self {
+            mode,
+            finished,
+            observer,
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl Drop for NativeFullscreenExit {
+    fn drop(&mut self) {
+        unsafe { NSNotificationCenter::defaultCenter().removeObserver((*self.observer).as_ref()) };
     }
 }
 
