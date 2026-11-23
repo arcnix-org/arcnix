@@ -72,13 +72,13 @@ def main():
             p.set_viewport_size(dict(width=900, height=620))
             shortcuts = p.locator('.desktop-shortcuts')
             apps = app.apps()
-            close_apps = apps.get_by_role('button', name='Close dialog', exact=True)
-            close_apps.focus()
+            search_apps = apps.get_by_role('textbox', name='Search apps', exact=True)
+            search_apps.focus()
             page_last_app = apps.locator('.desktop-app-catalog-item').last
-            close_apps.press('Shift+Tab')
+            search_apps.press('Shift+Tab')
             expect(page_last_app).to_be_focused()
             page_last_app.press('Tab')
-            expect(close_apps).to_be_focused()
+            expect(search_apps).to_be_focused()
             expect(apps.locator('.modal-footer')).to_be_hidden()
             assert apps.evaluate('''dialog => dialog.getBoundingClientRect().bottom
                 - dialog.querySelector('.desktop-app-catalog').getBoundingClientRect().bottom < 2''')
@@ -261,7 +261,7 @@ def main():
             preview = editor.locator('.markdown-preview')
             actions = titlebar.locator('.desktop-window-actions button')
             assert actions.evaluate_all("nodes => nodes.map(node => node.getAttribute('aria-label'))") == [
-                'Minimize window', 'Toggle maximize', 'Close application',
+                'Settings', 'Minimize window', 'Toggle maximize', 'Close application',
             ]
             plain_tab = strip.get_by_role('button', name='/plain.txt', exact=True)
             notes_tab = strip.get_by_role('button', name='/home/arcnix/Desktop/Notes.md', exact=True)
@@ -371,6 +371,7 @@ def main():
         'Desktop icons fill a column before growing right, with no vertical scroll or visible scrollbar',
         'The shared picker confirms selection and opens HTML directly in Text Editor',
         'The source view tracks the caret, both scroll axes, multiline tokens and undoable auto-indent',
+        'Enter inserts blank lines, replaces a selection, and saves typed line breaks with the original BOM and CRLF',
         'File, Edit and View menus work above the tab strip, with a scrollable tab picker when space runs out',
         'New and Save as write the selected draft and confirm replacement before overwriting',
         'Dragging files from Files and Desktop opens them directly without moving their originals',
