@@ -3,61 +3,98 @@
     let pointerMenu = null;
     let keyboardMenu = null;
     let scheduled = false;
-    let draggedGroup = null;
-    let dropPosition = null;
+    let drag = null;
+    let hint = null;
     let dragSequence = 0;
-    function clearDrag() {
-        document.querySelectorAll('.dragging-group,.drop-before,.drop-after').forEach(row => row.classList.remove('dragging-group','drop-before','drop-after'));
-        draggedGroup = null; dropPosition = null;
+
+    function markDrop(row, style) {
+        if (hint?.row === row && hint?.style === style) return;
+        if (hint) hint.row.classList.remove(hint.style);
+        hint = row ? {row, style} : null;
+        if (hint) row.classList.add(style);
     }
-    function groupId(row) { return row?.querySelector('.tree-group-id')?.textContent || ''; }
+
+    function clearDrag() {
+        markDrop(null);
+        drag?.row.classList.remove('tree-drag-source');
+        drag = null;
+    }
+
+    function groupId(folder) {
+        return folder?.querySelector('.tree-group-id')?.textContent;
+    }
+
     document.addEventListener('dragstart', event => {
-        const button = event.target instanceof Element && event.target.closest('.group-button');
+        const button = event.target.closest?.('.group-button,.host-select');
         const tree = button?.closest('.server-tree');
-        if (!tree || tree.classList.contains('reorder-disabled') || tree.closest('[inert]')) return;
-        const row = button.closest('.tree-folder-row');
-        draggedGroup = groupId(row);
-        if (!draggedGroup) return;
-        row.classList.add('dragging-group');
+        if (!tree || !button.draggable || tree.closest('.reorder-disabled,[inert]')) return;
+        const row = button.closest('.tree-folder-row,.host-row');
+        const server = button.matches('.host-select');
+        const id = server ? row.querySelector('.tree-server-id')?.textContent : groupId(row);
+        if (!id) return;
+        drag = {row, tree, id, server};
+        row.classList.add('tree-drag-source');
         event.dataTransfer.effectAllowed = 'move';
-        event.dataTransfer.setData('application/x-arcnix-group',draggedGroup);
-        // Drag just the row, so an expanded folder does not cover the drop target.
-        event.dataTransfer.setDragImage(row,20,row.offsetHeight / 2);
-    },true);
-    document.addEventListener('dragover', event => {
-        if (!draggedGroup || !(event.target instanceof Element)) return;
-        const tree = event.target.closest('.server-tree');
-        if (!tree || tree.classList.contains('reorder-disabled') || tree.closest('[inert]')) return;
-        let row = event.target.closest('.tree-folder')?.querySelector(':scope > .tree-folder-row');
+        event.dataTransfer.setData(server ? 'application/x-arcnix-server' : 'application/x-arcnix-group', id);
+        event.dataTransfer.setDragImage(row, 20, row.offsetHeight / 2);
+    }, true);
+
+    function destination(event) {
+        const target = event.target;
+        const sidebar = drag?.tree.closest('.server-explorer');
+        if (!sidebar || target.closest?.('.server-explorer') !== sidebar ||
+            drag.tree.closest('.reorder-disabled,[inert]') || target.closest('.context-popover')) return;
+        const folder = target.closest('.tree-folder');
+        let row = folder?.querySelector(':scope > .tree-folder-row');
+        if (drag.server) {
+            const root = target.closest('.tree-root-row');
+            if (!row && !root && target !== drag.tree) return;
+            const id = groupId(row) ?? null;
+            if (id === (groupId(drag.row.closest('.tree-folder')) ?? null)) return;
+            return {row: row || sidebar.querySelector('.tree-root-row'), style: 'drop-inside',
+                action: {kind: 'move_server', server: drag.id, target: id}};
+        }
+        if (!drag.tree.contains(target)) return;
         if (!row) {
-            const rows = tree.querySelectorAll('.tree-folder-row');
+            const rows = drag.tree.querySelectorAll('.tree-folder-row');
             const last = rows[rows.length - 1];
             if (last && event.clientY > last.getBoundingClientRect().bottom) row = last;
         }
-        document.querySelectorAll('.drop-before,.drop-after').forEach(item=>item.classList.remove('drop-before','drop-after'));
-        dropPosition = null;
-        if (!row || groupId(row)===draggedGroup) return;
+        if (!row || groupId(row) === drag.id) return;
         const box = row.getBoundingClientRect();
         const after = event.clientY > box.top + box.height / 2;
-        row.classList.add(after ? 'drop-after' : 'drop-before');
-        dropPosition = {target:groupId(row),after};
-        event.preventDefault();event.dataTransfer.dropEffect='move';
-        const bounds=tree.getBoundingClientRect();
-        if(event.clientY < bounds.top+28) tree.scrollTop-=12;
-        else if(event.clientY > bounds.bottom-28) tree.scrollTop+=12;
-    },true);
-    document.addEventListener('drop', event => {
-        if (!draggedGroup || !dropPosition || !(event.target instanceof Element)) {clearDrag();return;}
-        const sidebar=event.target.closest('.server-explorer');
-        const bridge=sidebar?.querySelector('.server-tree-input');
-        if(bridge && !sidebar.closest('[inert]') && !sidebar.querySelector('.reorder-disabled')) {
-            event.preventDefault();event.stopImmediatePropagation();
-            bridge.value=JSON.stringify({group:draggedGroup,...dropPosition,sequence:++dragSequence});
-            bridge.dispatchEvent(new Event('input',{bubbles:true}));
+        return {row, style: after ? 'drop-after' : 'drop-before',
+            action: {kind: 'reorder', group: drag.id, target: groupId(row), after}};
+    }
+
+    document.addEventListener('dragover', event => {
+        if (!drag) return;
+        const dest = destination(event);
+        markDrop(dest?.row, dest?.style);
+        if (drag.tree.contains(event.target)) {
+            const bounds = drag.tree.getBoundingClientRect();
+            if (event.clientY < bounds.top + 28) drag.tree.scrollTop -= 12;
+            else if (event.clientY > bounds.bottom - 28) drag.tree.scrollTop += 12;
         }
+        if (!dest) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+    }, true);
+    document.addEventListener('dragleave', event => {
+        if (drag && !drag.tree.closest('.server-explorer')?.contains(event.relatedTarget)) markDrop(null);
+    }, true);
+    document.addEventListener('drop', event => {
+        if (!drag) return;
+        const dest = destination(event);
+        const bridge = drag.tree.closest('.server-explorer')?.querySelector('.server-tree-input');
         clearDrag();
-    },true);
-    document.addEventListener('dragend',clearDrag,true);
+        if (!dest || !bridge) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        bridge.value = JSON.stringify({action: dest.action, sequence: ++dragSequence});
+        bridge.dispatchEvent(new Event('input', {bubbles: true}));
+    }, true);
+    document.addEventListener('dragend', clearDrag, true);
     const sidebarFor = target => target instanceof Element ? target.closest('.server-explorer') : null;
     function openMenu(target, point) {
         const sidebar = sidebarFor(target);
@@ -120,8 +157,8 @@
     }, true);
     function placeMenu() {
         scheduled = false;
-        for (const button of document.querySelectorAll('.server-tree .group-button')) {
-            const draggable=!button.closest('.reorder-disabled,[inert]');
+        for (const button of document.querySelectorAll('.server-tree :is(.group-button,.host-select)')) {
+            const draggable = !button.disabled && !button.closest('.reorder-disabled,[inert]');
             if(button.draggable!==draggable) button.draggable=draggable;
         }
         for (const menu of document.querySelectorAll('.server-explorer .context-popover')) {
@@ -140,7 +177,7 @@
         }
     }
     function schedule() { if (!scheduled) { scheduled = true; requestAnimationFrame(placeMenu); } }
-    new MutationObserver(schedule).observe(document, {subtree: true, childList: true, attributes: true, attributeFilter: ['class']});
+    new MutationObserver(schedule).observe(document, {subtree: true, childList: true, attributes: true, attributeFilter: ['class','disabled','inert']});
     // A menu's target can scroll away; dismiss via the normal Rust-owned scrim.
     document.addEventListener('scroll', event => {
         if (event.target instanceof Element && event.target.matches('.server-tree')) {

@@ -593,6 +593,7 @@ Ctrl+C 中断 · Ctrl+Shift+C 复制 · Ctrl+Shift+V 粘贴	Ctrl+C interrupt · 
 将删除此分组及其 {} 台服务器的本地配置和已保存的 SSH 凭据。	This removes the group, its {} local server profiles, and their saved SSH credentials.
 目标已不存在，请关闭对话框后重试。	The target no longer exists. Close this dialog and try again.
 无法保存分组顺序：{error:#}	Could not save group order: {error:#}
+无法移动服务器：{error:#}	Could not move server: {error:#}
 
 传输进度	Transfer progress
 耗时 {elapsed}	Elapsed {elapsed}
