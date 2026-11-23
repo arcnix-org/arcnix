@@ -38,6 +38,7 @@ pub(crate) struct PgAdmin {
     pub viewport: Option<native_viewport::Viewport>,
     pub error: String,
     pub reload: bool,
+    pub download: Option<Download>,
     connection: Connection,
     port: String,
 }
@@ -69,6 +70,43 @@ impl PgAdmin {
             _ => false,
         }
     }
+}
+
+#[derive(Clone)]
+pub(crate) struct Download {
+    pub path: std::path::PathBuf,
+    pub success: bool,
+}
+
+impl Download {
+    fn message(&self) -> String {
+        let name = self
+            .path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        if self.success {
+            format!("Saved {name} to Downloads")
+        } else {
+            format!("Could not save {name}")
+        }
+    }
+}
+
+/// Select the file in Finder; the folder opens even if the file was moved.
+fn reveal(download: &Download) {
+    #[cfg(target_os = "macos")]
+    {
+        let mut command = std::process::Command::new("/usr/bin/open");
+        if download.success && download.path.exists() {
+            command.arg("-R").arg(&download.path);
+        } else if let Some(folder) = download.path.parent() {
+            command.arg(folder);
+        }
+        let _ = command.spawn();
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = download;
 }
 
 pub(crate) enum Reply {
@@ -393,6 +431,22 @@ pub(crate) fn title_tools(ui: Ui) -> impl Widget {
     when(state.map(|s| s.pgadmin.url().is_some()), move || {
         let stop = ui.clone();
         row().class("desktop-app-tools").fill((
+            text()
+                .class("pgadmin-download subtle")
+                .content(i18n::bind(state.map(|s| {
+                    s.pgadmin
+                        .download
+                        .as_ref()
+                        .map(Download::message)
+                        .unwrap_or_default()
+                }))),
+            when(state.map(|s| s.pgadmin.download.is_some()), move || {
+                icon_action("Show in Finder", Icon::Folder).on_press(move || {
+                    if let Some(download) = state.with(|s| s.pgadmin.download.clone()) {
+                        reveal(&download);
+                    }
+                })
+            }),
             icon_action("Reload pgAdmin", Icon::Refresh)
                 .on_press(move || state.revise(|s| s.pgadmin.reload = true)),
             icon_action("Close database connection", Icon::Pause)

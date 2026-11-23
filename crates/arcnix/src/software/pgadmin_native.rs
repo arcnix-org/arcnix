@@ -1,4 +1,7 @@
 //! pgAdmin's interface in a child WebView limited to one loopback address.
+use std::cell::RefCell;
+use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::mpsc;
 use std::task::Waker;
 
@@ -52,6 +55,40 @@ fn position(view: &View, viewport: &native_viewport::Viewport) -> Result<()> {
     Ok(())
 }
 
+/// Files pgAdmin saves: links to its own blobs and data, or backend attachments.
+fn downloadable(origin: &str, url: &str) -> bool {
+    url.starts_with("data:")
+        || url
+            .strip_prefix("blob:")
+            .is_some_and(|rest| same_origin(origin, rest) && rest != "about:blank")
+        || (url.starts_with(origin) && same_origin(origin, url))
+}
+
+/// Keep only the name WebKit suggested, inside the Downloads folder, without
+/// replacing an existing file.
+fn destination(folder: &Path, suggested: &Path) -> Option<PathBuf> {
+    let name = suggested.file_name()?.to_str()?;
+    if name.starts_with('.') || name.chars().any(|c| c.is_control() || c == ':') {
+        return None;
+    }
+    let (stem, extension) = match name.rsplit_once('.') {
+        Some((stem, extension)) if !stem.is_empty() => (stem, format!(".{extension}")),
+        _ => (name, String::new()),
+    };
+    let mut path = folder.join(name);
+    for counter in 1..1000 {
+        if !path.exists() {
+            return Some(path);
+        }
+        path = folder.join(format!("{stem} ({counter}){extension}"));
+    }
+    None
+}
+
+pub(crate) fn downloads_folder() -> Option<PathBuf> {
+    std::env::home_dir().map(|home| home.join("Downloads"))
+}
+
 fn origin(url: &str) -> Option<&str> {
     let start = "http://127.0.0.1:".len();
     url.starts_with("http://127.0.0.1:").then_some(())?;
@@ -65,6 +102,7 @@ pub(crate) struct Host {
     url: Option<String>,
     view: Option<View>,
     focus: mpsc::Receiver<()>,
+    downloads: mpsc::Receiver<pgadmin_ui::Download>,
     bounds: Option<native_viewport::Viewport>,
 }
 
@@ -76,6 +114,7 @@ impl Host {
             url: None,
             view: None,
             focus: mpsc::channel().1,
+            downloads: mpsc::channel().1,
             bounds: None,
         }
     }
@@ -86,6 +125,12 @@ impl Host {
         let (send, receive) = mpsc::channel();
         self.focus = receive;
         let allowed = origin.clone();
+        let source = origin.clone();
+        let (saved, downloads) = mpsc::channel();
+        self.downloads = downloads;
+        let started: Rc<RefCell<Vec<(String, PathBuf)>>> = Rc::default();
+        let finished = started.clone();
+        let completed_wake = wake.clone();
         let web = WebViewBuilder::new()
             .with_visible(false)
             .with_focused(false)
@@ -96,7 +141,29 @@ impl Host {
             .with_navigation_handler(move |target| same_origin(&allowed, &target))
             .with_new_window_req_handler(|_, _| wry::NewWindowResponse::Deny)
             .with_permission_handler(|_| wry::PermissionResponse::Deny)
-            .with_download_started_handler(|_, _| false)
+            .with_download_started_handler(move |url, path| {
+                let Some(target) = downloads_folder()
+                    .filter(|_| downloadable(&source, &url))
+                    .and_then(|folder| destination(&folder, path))
+                else {
+                    return false;
+                };
+                *path = target.clone();
+                let mut started = started.borrow_mut();
+                started.retain(|(_, path)| !path.exists());
+                started.push((url, target));
+                true
+            })
+            .with_download_completed_handler(move |url, _, success| {
+                // macOS reports no path, so match the request instead.
+                let mut started = finished.borrow_mut();
+                if let Some(index) = started.iter().position(|(started, _)| *started == url) {
+                    let (_, path) = started.remove(index);
+                    if saved.send(pgadmin_ui::Download { path, success }).is_ok() {
+                        completed_wake.wake_by_ref();
+                    }
+                }
+            })
             .with_ipc_handler(move |request| {
                 // The page can only ask for its own window to come forward.
                 if same_origin(&origin, &request.uri().to_string())
@@ -159,6 +226,11 @@ impl Host {
         {
             self.ui.open_desktop_app(WorkspacePage::PgAdmin);
         }
+        if let Some(download) = self.downloads.try_iter().last() {
+            self.ui
+                .state
+                .revise(|s| s.pgadmin.download = Some(download));
+        }
         if self.ui.state.with(|s| s.pgadmin.reload) {
             self.ui.state.revise(|s| s.pgadmin.reload = false);
             let _ = view.web.load_url(url);
@@ -220,5 +292,42 @@ mod tests {
             assert!(!same_origin(origin, url), "{url}");
         }
         assert!(super::origin("http://example.com/").is_none());
+        for url in [
+            "blob:http://127.0.0.1:5050/0c7e",
+            "data:text/csv;base64,YQ==",
+            "http://127.0.0.1:5050/misc/download",
+        ] {
+            assert!(downloadable(origin, url), "{url}");
+        }
+        for url in [
+            "blob:http://127.0.0.1:5051/0c7e",
+            "blob:about:blank",
+            "https://example.com/file.csv",
+            "file:///etc/hosts",
+        ] {
+            assert!(!downloadable(origin, url), "{url}");
+        }
+    }
+
+    #[test]
+    fn downloads_stay_in_the_folder_and_keep_existing_files() {
+        let folder =
+            std::env::temp_dir().join(format!("arcnix-downloads-{}", arcnix_core::new_id()));
+        std::fs::create_dir(&folder).unwrap();
+        let first = destination(&folder, Path::new("/elsewhere/orders.csv")).unwrap();
+        assert_eq!(first, folder.join("orders.csv"));
+        std::fs::write(&first, "").unwrap();
+        assert_eq!(
+            destination(&folder, Path::new("orders.csv")).unwrap(),
+            folder.join("orders (1).csv")
+        );
+        assert_eq!(
+            destination(&folder, Path::new("README")).unwrap(),
+            folder.join("README")
+        );
+        for name in [".profile", "..", "a\nb.csv"] {
+            assert!(destination(&folder, Path::new(name)).is_none(), "{name}");
+        }
+        std::fs::remove_dir_all(folder).unwrap();
     }
 }

@@ -677,6 +677,7 @@ input,textarea,select{font:inherit}input{height:36px}textarea{line-height:1.6}
 .pgadmin-panel { width: min(420px, calc(100% - 32px)); margin: auto; padding: 16px 0; overflow-y: auto; }
 .pgadmin-error { padding: 8px 12px; overflow-wrap: anywhere; }
 .pgadmin-error:empty { display: none; }
+.pgadmin-download { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .app-pgadmin { --tile-tint: #4580b4; --tile-shade: #274f78; }
 .desktop-app-label { font-size: 13px; line-height: 1.35; font-weight: 500; white-space: normal; text-align: center; }
 .desktop-dock-zone {

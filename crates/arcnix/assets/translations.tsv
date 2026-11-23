@@ -2792,3 +2792,6 @@ PostgreSQL 端口	PostgreSQL port
 SSH 服务器不允许转发到此 PostgreSQL 地址。	The SSH server does not allow forwarding to this PostgreSQL address.
 服务器无法连接 PostgreSQL。请检查其是否运行以及地址是否正确。	The server could not reach PostgreSQL. Check that it is running and the address is correct.
 无法通过 SSH 打开 PostgreSQL 连接。	The PostgreSQL connection could not be opened through SSH.
+已将 {name} 保存到“下载”	Saved {name} to Downloads
+无法保存 {name}	Could not save {name}
+在访达中显示	Show in Finder
