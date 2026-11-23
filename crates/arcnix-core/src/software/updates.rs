@@ -390,6 +390,68 @@ fn cached_update(
     }
     Some(cached)
 }
+/// Download one size- and digest-pinned asset to a new file.
+async fn fetch(
+    source: &Source,
+    asset: &Asset,
+    path: &Path,
+    check: &impl Fn() -> Result<()>,
+    progress: &mut impl FnMut(u64, u64),
+) -> Result<fs::File> {
+    let url = Url::parse(&asset.url)?;
+    ensure!(source.allowed(&url), "Update URL is not trusted");
+    let mut response = cancellable(source.download_client()?.get(url).send(), check)
+        .await??
+        .error_for_status()?;
+    if let Some(size) = response.content_length() {
+        ensure!(
+            size == asset.size,
+            "Download length differs from release metadata"
+        );
+    }
+    let mut output = OpenOptions::new()
+        .create_new(true)
+        .read(true)
+        .write(true)
+        .open(path)?;
+    let mut hash = Sha256::new();
+    let mut done = 0u64;
+    progress(0, asset.size);
+    loop {
+        let Some(chunk) = cancellable(response.chunk(), check).await?? else {
+            break;
+        };
+        done += chunk.len() as u64;
+        ensure!(
+            done <= asset.size && done <= MAX_ASSET,
+            "Download exceeds expected size"
+        );
+        output.write_all(&chunk)?;
+        hash.update(&chunk);
+        progress(done, asset.size);
+    }
+    ensure!(done == asset.size, "Update download was incomplete");
+    ensure!(
+        format!("{:x}", hash.finalize()) == asset.digest,
+        "Update checksum mismatch; file will not be installed"
+    );
+    output.sync_all()?;
+    Ok(output)
+}
+
+pub(crate) fn download(
+    source: &Source,
+    asset: &Asset,
+    path: &Path,
+    check: impl Fn() -> Result<()>,
+    mut progress: impl FnMut(u64, u64),
+) -> Result<fs::File> {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(fetch(source, asset, path, &check, &mut progress))
+}
+
 pub fn prepare(
     source: &Source,
     release: &Release,
@@ -420,42 +482,7 @@ pub fn prepare(
         .build()?;
     let temporary_receipt = root.join(format!("ready-{}.tmp", crate::new_id()));
     let result = runtime.block_on(async {
-        let mut response = cancellable(source.download_client()?.get(url).send(), &check)
-            .await??
-            .error_for_status()?;
-        if let Some(size) = response.content_length() {
-            ensure!(
-                size == asset.size,
-                "Download length differs from release metadata"
-            );
-        }
-        let mut output = OpenOptions::new()
-            .create_new(true)
-            .read(true)
-            .write(true)
-            .open(&archive)?;
-        let mut hash = Sha256::new();
-        let mut done = 0u64;
-        progress(0, asset.size);
-        loop {
-            let Some(chunk) = cancellable(response.chunk(), &check).await?? else {
-                break;
-            };
-            done += chunk.len() as u64;
-            ensure!(
-                done <= asset.size && done <= MAX_ASSET,
-                "Download exceeds expected size"
-            );
-            output.write_all(&chunk)?;
-            hash.update(&chunk);
-            progress(done, asset.size);
-        }
-        ensure!(done == asset.size, "Update download was incomplete");
-        ensure!(
-            format!("{:x}", hash.finalize()) == asset.digest,
-            "Update checksum mismatch; file will not be installed"
-        );
-        output.sync_all()?;
+        let mut output = fetch(source, asset, &archive, &check, &mut progress).await?;
         output.rewind()?;
         check()?;
         let mut executable = OpenOptions::new()
