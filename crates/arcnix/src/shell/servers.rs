@@ -34,19 +34,31 @@ pub(crate) fn edit_server(ui: &Ui, id: &str) {
 
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Reorder {
-    group: String,
-    target: String,
-    after: bool,
+struct TreeDrop {
+    action: TreeAction,
     #[serde(rename = "sequence")]
     _sequence: u64,
 }
 
-fn reorder(ui: &Ui, value: &str) {
+#[derive(serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+enum TreeAction {
+    Reorder {
+        group: String,
+        target: String,
+        after: bool,
+    },
+    MoveServer {
+        server: String,
+        target: Option<String>,
+    },
+}
+
+fn apply_tree_drop(ui: &Ui, value: &str) {
     if value.len() > 2048 {
         return;
     }
-    let Ok(gesture) = serde_json::from_str::<Reorder>(value) else {
+    let Ok(gesture) = serde_json::from_str::<TreeDrop>(value) else {
         return;
     };
     if ui
@@ -57,16 +69,56 @@ fn reorder(ui: &Ui, value: &str) {
     }
     let result = ui.state.with(|s| -> anyhow::Result<Option<AppConfig>> {
         let mut config = s.config.clone();
-        if !config.move_group(&gesture.group, &gesture.target, gesture.after)? {
+        let changed = match &gesture.action {
+            TreeAction::Reorder {
+                group,
+                target,
+                after,
+            } => config.move_group(group, target, *after)?,
+            TreeAction::MoveServer { server, target } => {
+                if target
+                    .as_ref()
+                    .is_some_and(|id| !config.groups.iter().any(|g| &g.id == id))
+                {
+                    return Ok(None);
+                }
+                let Some(profile) = config
+                    .servers
+                    .iter_mut()
+                    .find(|p| &p.id == server && p.available_on_this_platform())
+                else {
+                    return Ok(None);
+                };
+                if &profile.group_id == target {
+                    return Ok(None);
+                }
+                profile.group_id = target.clone();
+                true
+            }
+        };
+        if !changed {
             return Ok(None);
         }
         persist(ui, &config)?;
         Ok(Some(config))
     });
     match result {
-        Ok(Some(config)) => ui.state.revise(|s| s.config = config),
+        Ok(Some(config)) => ui.state.revise(|s| {
+            s.config = config;
+            if let TreeAction::MoveServer { server, target } = gesture.action {
+                if let Some(id) = &target {
+                    s.collapsed_groups.remove(id);
+                }
+                if s.selected.as_ref() == Some(&server) {
+                    s.group = target;
+                }
+            }
+        }),
         Ok(None) => {}
-        Err(error) => ui.error(format!("无法保存分组顺序：{error:#}")),
+        Err(error) => match gesture.action {
+            TreeAction::Reorder { .. } => ui.error(format!("无法保存分组顺序：{error:#}")),
+            TreeAction::MoveServer { .. } => ui.error(format!("无法移动服务器：{error:#}")),
+        },
     }
 }
 
@@ -261,7 +313,7 @@ pub(crate) fn sidebar(ui: Ui) -> impl Widget {
                 let ui = ui.clone();
                 move |event| {
                     if let Event::ValueChanged { value, .. } = event {
-                        reorder(&ui, &value);
+                        apply_tree_drop(&ui, &value);
                     }
                 }
             }),
@@ -485,6 +537,9 @@ fn server_rows(ui: Ui, group: Option<String>) -> impl Widget {
                         )
                     }))
                     .fill((
+                        text()
+                            .class("tree-server-id hidden")
+                            .content(value.map(|p| p.id.clone())),
                         icons::glyph(Icon::Server),
                         sapid::button()
                             .class("host-select")

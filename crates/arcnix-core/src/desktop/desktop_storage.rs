@@ -5,7 +5,9 @@ use sha2::{Digest, Sha256};
 
 use crate::Theme;
 use crate::browser::Bookmark;
-use crate::desktop_customization::{Appearance, Dock, Layout, Shortcut, Wallpaper};
+use crate::desktop_customization::{
+    Appearance, Dock, Layout, Shortcut, Wallpaper, known_apps, known_shortcuts,
+};
 use crate::desktop_shortcuts::Shortcuts;
 use crate::desktop_theme::{Overrides, Preset, Themes, appearance_value, built_in_wallpaper};
 use crate::server_apps::{
@@ -81,7 +83,9 @@ impl Default for System {
 struct Shell {
     show_server: bool,
     show_apps: bool,
+    #[serde(deserialize_with = "known_shortcuts")]
     order: Vec<Shortcut>,
+    #[serde(deserialize_with = "known_apps")]
     hidden: Vec<App>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(deserialize_with = "appearance_value")]
@@ -336,6 +340,22 @@ pub fn encode(prefs: &DesktopPreferences) -> Result<Vec<u8>> {
         packet.push(b'\n');
     }
     Ok(packet)
+}
+
+/// The packet with one file's contents replaced.
+#[cfg(test)]
+pub(crate) fn replace_for_test(packet: &[u8], path: &str, contents: &[u8]) -> Result<Vec<u8>> {
+    let mut replaced = HEADER.to_vec();
+    for record in records(packet)? {
+        let data = if record.path == path {
+            contents
+        } else {
+            record.contents
+        };
+        replaced.extend_from_slice(format!("{}\n", data.len()).as_bytes());
+        replaced.extend_from_slice(data);
+    }
+    Ok(replaced)
 }
 
 struct Record<'a> {

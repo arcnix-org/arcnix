@@ -13,6 +13,7 @@ pub(crate) fn check_support(target: &Target) -> Result<()> {
     #[cfg(windows)]
     {
         use std::sync::OnceLock;
+
         use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
         use windows::core::{s, w};
         static CONPTY: OnceLock<bool> = OnceLock::new();

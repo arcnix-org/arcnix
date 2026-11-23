@@ -131,9 +131,15 @@ def main():
             expect(submenu.get_by_role('button', name='Code Editor', exact=True)).to_be_visible()
             expect(submenu.get_by_role('button', name='Player', exact=True)).to_be_visible()
             app.action('Text Editor')
-            expect(page.get_by_role('dialog', name='Text Editor', exact=True).get_by_role(
-                'textbox', name='File contents', exact=True,
-            )).to_have_value(re.compile('const greeting'))
+            contents = page.get_by_role('dialog', name='Text Editor', exact=True).get_by_role(
+                'textbox', name='File contents', exact=True)
+            expect(contents).to_have_value(re.compile('const greeting'))
+            contents.press('Control+End')
+            contents.press('Enter')
+            contents.press_sequentially('// second line')
+            contents.press('Control+s')
+            eventually(lambda: (peer.root / 'source.ts').read_bytes() ==
+                       b'const greeting: string = "hello";\n// second line')
             page.get_by_role('dialog', name='Text Editor', exact=True).get_by_role(
                 'button', name='Close dialog', exact=True,
             ).click()
@@ -178,7 +184,7 @@ def main():
             expect(associated_app(association, 'Player')).to_contain_text('Built-in support')
             association.get_by_role('button', name='Add another app', exact=True).click()
             apps = association.get_by_role('group', name='Apps to add', exact=True)
-            expect(apps.get_by_role('button')).to_have_text(['Text Editor', 'Code Editor', 'Browser'])
+            expect(apps.get_by_role('button')).to_have_text(['Text Editor', 'Code Editor', 'Image Viewer', 'PDF Reader', 'Browser'])
             apps.get_by_role('button', name='Code Editor', exact=True).click()
             association.get_by_role('button', name='Cancel', exact=True).click()
             expect(apps).to_be_hidden()
@@ -187,7 +193,7 @@ def main():
             eventually(lambda: associations().get('m2ts') == {'added_apps': ['code']})
             expect(associated_app(association, 'Player')).to_contain_text('Default app')
             association.get_by_role('button', name='Add another app', exact=True).click()
-            expect(apps.get_by_role('button')).to_have_text(['Text Editor', 'Browser'])
+            expect(apps.get_by_role('button')).to_have_text(['Text Editor', 'Image Viewer', 'PDF Reader', 'Browser'])
             association.get_by_role('button', name='Done', exact=True).click()
             search_extensions('.HTML')
             expect(extension_row('html').locator('.file-association-current')).to_have_text('Browser')

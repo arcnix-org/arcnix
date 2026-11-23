@@ -3,6 +3,7 @@
 ## 未发布
 
 - macOS 新增 pgAdmin 窗口。首次打开时下载由 arcnix-org/pgadmin4 构建的 pgAdmin 组件，后端在本机运行，经 SSH 连接服务器上的 PostgreSQL。可从 Apps 或 App Center 的 PostgreSQL 打开，查询结果和导出文件保存到「下载」。
+- 读取服务器桌面设置时跳过本版本不认识的应用。较新版本加入的应用不再导致整份桌面设置无法读取。
 
 ## 0.3.5 — 2026-11-23
 

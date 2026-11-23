@@ -658,6 +658,62 @@ mod tests {
     use crate::desktop_customization::DockItem;
 
     #[test]
+    fn settings_naming_newer_apps_still_load() -> Result<()> {
+        use crate::desktop_customization::{Shortcut, SystemIcon};
+        // Saved by a newer Arcnix with an app this version does not have.
+        let prefs = parse_preferences(
+            r#"{"version":1,"appearance":{
+                "order":[{"kind":"app","id":"files"},{"kind":"app","id":"later_app"},
+                         {"kind":"file","id":"notes.txt"}],
+                "hidden":["later_app","docker"],
+                "dock":{"order":["later_app","terminal",{"system":"home"}],
+                        "unpinned":["later_app"],"extra_pins":["later_app","editor"]}}}"#,
+        )?;
+        let appearance = &prefs.appearance;
+        assert_eq!(
+            appearance.order,
+            [
+                Shortcut::App(DesktopApp::Files),
+                Shortcut::File("notes.txt".into())
+            ]
+        );
+        assert_eq!(appearance.hidden, [DesktopApp::Docker]);
+        assert_eq!(
+            appearance.dock.order,
+            [
+                DockItem::App(DesktopApp::Terminal),
+                DockItem::System {
+                    system: SystemIcon::Home
+                }
+            ]
+        );
+        assert!(appearance.dock.unpinned.is_empty());
+        assert_eq!(appearance.dock.extra_pins, [DesktopApp::Editor]);
+        // The per-file format reads the desktop file separately.
+        let packet = crate::desktop_storage::encode(&DesktopPreferences::default())?;
+        let shell = br#"{"order":[{"kind":"app","id":"later_app"}],"hidden":["later_app"]}"#;
+        let packet =
+            crate::desktop_storage::replace_for_test(&packet, "preferences/desktop.json", shell)?;
+        assert_eq!(
+            crate::desktop_storage::decode(&packet)?,
+            DesktopPreferences::default()
+        );
+        // Other unreadable entries are still errors.
+        for broken in [
+            r#"{"appearance":{"order":[{"kind":"widget","id":"x"}]}}"#,
+            r#"{"appearance":{"order":[{"kind":"app","id":7}]}}"#,
+            r#"{"appearance":{"order":["later_app"]}}"#,
+            r#"{"appearance":{"hidden":[{"kind":"app","id":"later_app"}]}}"#,
+            r#"{"appearance":{"dock":{"order":[{"kind":"app","id":"later_app"}]}}}"#,
+            r#"{"appearance":{"hidden":[7]}}"#,
+            r#"{"appearance":{"dock":{"order":[{"system":"nowhere"}]}}}"#,
+        ] {
+            assert!(parse_preferences(broken).is_err(), "{broken}");
+        }
+        Ok(())
+    }
+
+    #[test]
     fn app_preferences_round_trip_through_desktop_storage() -> Result<()> {
         let mut prefs = parse_preferences(r#"{"version":1}"#)?;
         assert_eq!(prefs.app_settings, DesktopAppSettings::default());

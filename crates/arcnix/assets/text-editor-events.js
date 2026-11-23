@@ -91,6 +91,21 @@
 
     document.addEventListener('keydown', event => {
         if (event.isComposing || event.target.closest?.('[inert]')) return;
+        const input = event.target;
+        if (event.key === 'Enter' && input.matches?.('textarea.remote-editor-content') &&
+            !event.ctrlKey && !event.metaKey && !event.altKey) {
+            // The shell handles Enter as Submit in capture. Let the textarea perform
+            // the native edit, including selection replacement and undo.
+            event.stopPropagation();
+            const view = sheets.get(input.closest('.editor-sheet'));
+            if (view?.mode && !input.readOnly && !input.disabled && !event.shiftKey &&
+                event.keyCode !== 229 && input.selectionStart === input.selectionEnd) {
+                const prefix = input.value.slice(0, input.selectionStart);
+                const indent = /^[\t ]+/.exec(prefix.slice(prefix.lastIndexOf('\n') + 1));
+                if (indent && document.execCommand('insertText', false, '\n' + indent[0])) event.preventDefault();
+            }
+            return;
+        }
         const menu = event.target.closest?.('.editor-menu');
         if (menu && ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Escape'].includes(event.key)) {
             const popup = menu.querySelector('.editor-menu-popup');
@@ -198,15 +213,6 @@
             input.addEventListener('input', () => this.schedule());
             input.addEventListener('scroll', () => this.schedule(), {passive: true});
             input.addEventListener('selectionchange', () => this.schedule());
-            input.addEventListener('keydown', event => {
-                if (!this.mode || event.key !== 'Enter' || event.isComposing || event.shiftKey ||
-                    event.ctrlKey || event.metaKey || event.altKey || input.selectionStart !== input.selectionEnd) return;
-                const caret = input.selectionStart;
-                const start = input.value.slice(0, caret).lastIndexOf('\n') + 1;
-                const indent = /^[\t ]+/.exec(input.value.slice(start, caret));
-                // A native edit keeps auto-indent in the same undo stack as normal typing.
-                if (indent && document.execCommand('insertText', false, '\n' + indent[0])) event.preventDefault();
-            });
             input.addEventListener('compositionstart', () => host.classList.add('editor-composing'));
             input.addEventListener('compositionend', () => {
                 host.classList.remove('editor-composing');

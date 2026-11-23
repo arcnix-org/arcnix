@@ -54,6 +54,15 @@ def main():
             prod.locator('.group-button').drag_to(empty_folder.locator('.group-button'),target_position=dict(x=60,y=36))
             expect(tree.locator('.tree-group-id')).to_have_text(['b','empty','a'])
             assert [g['id'] for g in json.loads(config.read_text())['config']['groups']]==['b','empty','a']
+            original_servers = json.loads(config.read_text())['config']['servers']
+            empty_folder.locator('.group-button').click()
+            expect(empty_folder.locator('.tree-children')).to_have_count(0)
+            local_select.drag_to(empty_folder.locator('.group-button'))
+            expect(empty_folder.locator('.host-row.selected .host-name')).to_have_text('Local server')
+            assert json.loads(config.read_text())['config']['servers'] == [
+                dict(server, group_id='empty') if server['id'] == 'three' else server
+                for server in original_servers
+            ]
             # A second real app reads the saved ordering without sharing any UI state.
             with socket.socket() as sock:sock.bind(('127.0.0.1',0));reload_port=sock.getsockname()[1]
             reload_env=env.copy();reload_env['WEBVIEW2_USER_DATA_FOLDER']=str(out/('reload-'+str(time.time_ns())));reload_env['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS']=f'--remote-debugging-port={reload_port} --remote-debugging-address=127.0.0.1'
@@ -66,8 +75,17 @@ def main():
                         if reload_process.poll() is not None or time.monotonic()>deadline:raise RuntimeError('Reload failed')
                         time.sleep(.1)
                 reload_browser=pw.chromium.connect_over_cdp(f'http://127.0.0.1:{reload_port}');reload_page=reload_browser.contexts[0].pages[0]
-                expect(reload_page.locator('.tree-group-id')).to_have_text(['b','empty','a']);reload_browser.close()
+                expect(reload_page.locator('.tree-group-id')).to_have_text(['b','empty','a'])
+                restored = reload_page.locator('.tree-folder').filter(has=reload_page.get_by_role('button', name='Empty', exact=True))
+                expect(restored.locator('.host-name')).to_have_text('Local server')
+                reload_browser.close()
             finally:reload_process.terminate();reload_process.wait(timeout=10)
+            empty_folder.locator('.host-select').drag_to(stage.locator('.group-button'))
+            moved = stage.locator('.host-row').filter(has_text='Local server')
+            expect(moved).to_have_count(1)
+            moved.locator('.host-select').drag_to(page.locator('.tree-root-row .sidebar-title'))
+            expect(local_select.locator('.host-name')).to_have_text('Local server')
+            assert json.loads(config.read_text())['config']['servers'] == original_servers
             prod.locator('.group-button').drag_to(stage.locator('.group-button'),target_position=dict(x=60,y=2))
             expect(tree.locator('.tree-group-id')).to_have_text(['a','b','empty'])
 
@@ -115,12 +133,12 @@ def main():
             renamed=folders.filter(has=page.get_by_role('button',name='Production renamed',exact=True))
             renamed.locator('.host-select').click()
             renamed.locator('.group-more').click();menu.get_by_role('button',name='Delete group & servers',exact=True).click()
-            dialog=page.get_by_role('dialog');expect(dialog).to_contain_text('New child');expect(dialog).to_contain_text('No remote servers or files will be deleted.')
+            dialog=page.get_by_role('dialog');expect(dialog).to_contain_text('New child');expect(dialog).to_contain_text('its 1 local server profiles, and their saved SSH credentials.')
             before=config.read_bytes();page.keyboard.press('Escape');expect(dialog).to_have_count(0);assert config.read_bytes()==before
             renamed.locator('.group-button').click(button='right');menu.get_by_role('button',name='Delete group & servers',exact=True).click();dialog.locator('.modal-footer button').last.click();expect(dialog).to_have_count(0)
             saved=json.loads(config.read_text())['config'];assert len(saved['servers'])==3 and all(g['id']!='a' for g in saved['groups'])
             expect(page.locator('.server-landing')).to_be_visible();expect(page.locator('.host-select')).to_have_count(3)
-            empty_folder.locator('.group-button').click(button='right');menu.get_by_role('button',name='Delete group & servers',exact=True).click();expect(dialog).to_contain_text('0 saved server profiles');dialog.locator('.modal-footer button').last.click();expect(dialog).to_have_count(0)
+            empty_folder.locator('.group-button').click(button='right');menu.get_by_role('button',name='Delete group & servers',exact=True).click();expect(dialog).to_contain_text('0 local server profiles');dialog.locator('.modal-footer button').last.click();expect(dialog).to_have_count(0)
             assert len(json.loads(config.read_text())['config']['servers'])==3
             assert not errors,errors
             print('Passed: pointer highlight without inner focus frames; keyboard row focus and More focus; SVG alignment; native drag ordering/reload; dissolve/purge/cancel; tree nesting; independent/global collapse; inherited server creation; group rename; server reassignment; search; matching right-click/More menus; keyboard navigation; theme and menu bounds.')
