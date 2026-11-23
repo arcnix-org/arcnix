@@ -336,8 +336,9 @@ pub struct Response {
     pub update: Update,
 }
 fn pgadmin_install(base: &Path, cancel: &AtomicBool, reply: impl Fn(crate::pgadmin_ui::Reply)) {
-    use crate::pgadmin_ui::Reply;
     use arcnix_core::{pgadmin, updates};
+
+    use crate::pgadmin_ui::Reply;
     let check = || {
         anyhow::ensure!(!cancel.load(Ordering::Acquire), "Installation cancelled");
         Ok(())
@@ -1019,8 +1020,9 @@ pub(crate) fn start_with_limiter(
                     let events = events.clone();
                     let generation = generation.clone();
                     thread::spawn(move || {
-                        use crate::pgadmin_ui::Reply;
                         use arcnix_core::pgadmin;
+
+                        use crate::pgadmin_ui::Reply;
                         let reply = |reply| {
                             let _ = events.send_blocking(Response {
                                 epoch,
