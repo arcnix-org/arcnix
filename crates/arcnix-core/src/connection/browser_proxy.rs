@@ -1,4 +1,5 @@
-//! Loopback SOCKS5 CONNECT through a dedicated, host-key-verified SSH transport.
+//! Loopback forwarding through a dedicated, host-key-verified SSH transport:
+//! SOCKS5 CONNECT for the browser and one fixed destination for managed apps.
 use std::io::{self, Read, Write};
 use std::net::{Ipv4Addr, Ipv6Addr, Shutdown, TcpListener, TcpStream};
 use std::time::{Duration, Instant};
@@ -170,7 +171,47 @@ pub fn run(
         }
     }
     ready(listener.local_addr()?.port());
-    serve(listener, &session, stopped, denied)
+    serve(
+        listener,
+        &session,
+        None,
+        stopped,
+        |host, port, diagnosis| {
+            if diagnosis == Diagnosis::ForwardingDenied {
+                denied(host, port);
+            }
+        },
+    )
+}
+
+/// Forward every connection on the listener to one destination, resolved and
+/// opened by the SSH server. Runs until stopped or the transport fails.
+#[allow(clippy::too_many_arguments)]
+pub fn run_fixed(
+    listener: &TcpListener,
+    profile: &ServerProfile,
+    fingerprint: &str,
+    secret: Zeroizing<String>,
+    destination: (&str, u16),
+    stopped: impl Fn() -> bool,
+    ready: impl FnOnce(),
+    failed: impl Fn(Diagnosis),
+) -> Result<()> {
+    let session = PendingConnection::open_for_known_host(profile, fingerprint)?
+        .authenticate_transport(&secret, fingerprint)?;
+    drop(secret);
+    if stopped() {
+        return Ok(());
+    }
+    session.set_blocking(false);
+    ready();
+    serve(
+        listener,
+        &session,
+        Some(destination),
+        stopped,
+        |_, _, diagnosis| failed(diagnosis),
+    )
 }
 
 struct Target {
@@ -251,12 +292,17 @@ struct Client {
 }
 
 impl Client {
-    fn new(socket: TcpStream) -> io::Result<Self> {
+    fn new(socket: TcpStream, fixed: Option<(&str, u16)>) -> io::Result<Self> {
         socket.set_nonblocking(true)?;
         socket.set_nodelay(true)?;
         Ok(Self {
             socket,
-            phase: Phase::Greeting,
+            phase: fixed.map_or(Phase::Greeting, |(host, port)| {
+                Phase::Waiting(Target {
+                    host: host.to_owned(),
+                    port,
+                })
+            }),
             created: Instant::now(),
             input: Vec::new(),
             reply: Vec::new(),
@@ -455,8 +501,9 @@ impl Relay {
 fn serve(
     listener: &TcpListener,
     session: &Session,
+    fixed: Option<(&str, u16)>,
     stopped: impl Fn() -> bool,
-    denied: impl Fn(&str, u16),
+    failed: impl Fn(&str, u16, Diagnosis),
 ) -> Result<()> {
     let mut clients = Vec::<Client>::new();
     let mut opening = false;
@@ -465,7 +512,7 @@ fn serve(
         if clients.len() < MAX_CLIENTS {
             match listener.accept() {
                 Ok((socket, _)) => {
-                    if let Ok(client) = Client::new(socket) {
+                    if let Ok(client) = Client::new(socket, fixed) {
                         clients.push(client);
                     }
                 }
@@ -485,7 +532,9 @@ fn serve(
                     // The SSH server resolves names and opens the destination socket.
                     match session.channel_direct_tcpip(&target.host, target.port, None) {
                         Ok(channel) => {
-                            client.connect_reply(0);
+                            if fixed.is_none() {
+                                client.connect_reply(0);
+                            }
                             client.phase =
                                 Phase::Relay(Box::new(Relay::new(channel, &client.input)));
                             client.input.clear();
@@ -494,14 +543,22 @@ fn serve(
                         }
                         Err(error) if error.code() == EAGAIN => {}
                         Err(error) => {
-                            if error.message().ends_with("(administratively prohibited)") {
-                                denied(&target.host, target.port);
-                            }
+                            let diagnosis =
+                                if error.message().ends_with("(administratively prohibited)") {
+                                    Diagnosis::ForwardingDenied
+                                } else if error.message().ends_with("(connect failed)") {
+                                    Diagnosis::DestinationUnreachable
+                                } else {
+                                    Diagnosis::ForwardingFailed
+                                };
                             let error = anyhow::Error::new(error);
                             if transport_error::is_connection_error(&error) {
                                 return Err(error);
                             }
-                            client.connect_reply(5);
+                            failed(&target.host, target.port, diagnosis);
+                            if fixed.is_none() {
+                                client.connect_reply(5);
+                            }
                             client.phase = Phase::Reject;
                             opening = false;
                         }
