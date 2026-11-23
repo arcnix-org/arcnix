@@ -21,7 +21,7 @@ const ORIGIN: &str = "http://arcnixcode.localhost";
 const ORIGIN: &str = "arcnixcode://localhost";
 
 #[cfg(target_os = "macos")]
-mod mac_surface;
+use crate::mac_surface;
 
 struct CodeView {
     web: WebView,

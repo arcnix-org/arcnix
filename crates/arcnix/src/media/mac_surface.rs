@@ -1,4 +1,5 @@
-//! Keep the embedded WKWebView interactive only where the desktop exposes it.
+//! Keep an embedded WKWebView visible and interactive only where the desktop
+//! exposes it. Shared by the Code and pgAdmin windows.
 use anyhow::{Context, Result};
 use objc2::{DefinedClass, MainThreadOnly, define_class, msg_send, rc::Retained};
 use objc2_app_kit::NSView;
@@ -10,7 +11,7 @@ use crate::native_viewport::Viewport;
 
 define_class!(
     #[unsafe(super(NSView))]
-    #[name = "ArcnixCodeClipView"]
+    #[name = "ArcnixClipView"]
     #[ivars = Retained<CAShapeLayer>]
     struct ClipView;
 
@@ -37,11 +38,11 @@ impl ClipView {
     }
 }
 
-pub(super) struct Surface(Retained<ClipView>);
+pub(crate) struct Surface(Retained<ClipView>);
 
 impl Surface {
-    pub(super) fn attach(child: &NSView) -> Result<Self> {
-        let parent = unsafe { child.superview() }.context("Missing Code WebView parent")?;
+    pub(crate) fn attach(child: &NSView) -> Result<Self> {
+        let parent = unsafe { child.superview() }.context("Missing WebView parent")?;
         let allocated = ClipView::alloc(child.mtm()).set_ivars(CAShapeLayer::layer());
         let wrapper: Retained<ClipView> =
             unsafe { msg_send![super(allocated), initWithFrame: child.frame()] };
@@ -50,25 +51,25 @@ impl Surface {
         wrapper.setAutoresizingMask(child.autoresizingMask());
         parent.addSubview(wrapper);
         wrapper.setWantsLayer(true);
-        let layer = wrapper.layer().context("Missing Code clipping layer")?;
+        let layer = wrapper.layer().context("Missing clipping layer")?;
         // This mask belongs exclusively to the wrapper's backing layer.
         unsafe { layer.setMask(Some(wrapper.ivars())) };
         wrapper.addSubview(child);
         Ok(surface)
     }
 
-    pub(super) fn position(&self, child: &NSView, viewport: &Viewport) -> Result<()> {
+    pub(crate) fn position(&self, child: &NSView, viewport: &Viewport) -> Result<()> {
         let wrapper = &self.0;
-        let area = viewport.area.context("Missing Code bounds")?;
+        let area = viewport.area.context("Missing WebView bounds")?;
         let visible = viewport.visible_rects();
         if visible.is_empty() {
             child.setHidden(true);
             return Ok(());
         }
-        let parent = unsafe { wrapper.superview() }.context("Missing Code surface parent")?;
+        let parent = unsafe { wrapper.superview() }.context("Missing clipping surface parent")?;
         let scale = parent
             .window()
-            .context("Missing Code window")?
+            .context("Missing WebView window")?
             .backingScaleFactor();
         let points = |px: i32| f64::from(px) / scale;
         let parent_bounds = parent.bounds();

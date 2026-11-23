@@ -174,6 +174,13 @@ pub enum Action {
     RepairBrowserForwarding {
         sudo: zeroize::Zeroizing<String>,
     },
+    PgAdminOpen(PathBuf),
+    PgAdminInstall(PathBuf, Arc<AtomicBool>),
+    PgAdminStart {
+        base: PathBuf,
+        connection: arcnix_core::pgadmin::Connection,
+        stop: Arc<AtomicBool>,
+    },
     PackageDetect,
     PackageSearch(String),
     PackageInstalled,
@@ -244,6 +251,7 @@ impl BrowserProxyControl {
 pub enum Update {
     LocalDesktop(Result<String, String>),
     Pdf(crate::pdf_reader::Reply),
+    PgAdmin(crate::pgadmin_ui::Reply),
     Video(Result<Arc<crate::video_player::Source>, String>),
     #[cfg(windows)]
     Html(Result<String, String>),
@@ -326,6 +334,37 @@ pub struct Response {
     pub epoch: u64,
     pub serial: u64,
     pub update: Update,
+}
+fn pgadmin_install(base: &Path, cancel: &AtomicBool, reply: impl Fn(crate::pgadmin_ui::Reply)) {
+    use crate::pgadmin_ui::Reply;
+    use arcnix_core::{pgadmin, updates};
+    let check = || {
+        anyhow::ensure!(!cancel.load(Ordering::Acquire), "Installation cancelled");
+        Ok(())
+    };
+    let mut shown = 0;
+    let result = if let Some(package) = pgadmin::local_package() {
+        pgadmin::install_local(base, &package, check)
+    } else if let Some(asset) = pgadmin::package() {
+        pgadmin::install(
+            base,
+            &updates::Source::github(),
+            &asset,
+            check,
+            |done, total| {
+                let percent = done * 100 / total.max(1);
+                if percent != shown {
+                    shown = percent;
+                    reply(Reply::Progress(percent));
+                }
+            },
+        )
+    } else {
+        Err(anyhow::anyhow!("pgAdmin is not available for this system"))
+    };
+    reply(Reply::Installed(
+        result.map(|_| ()).map_err(|error| format!("{error:#}")),
+    ));
 }
 fn publish_file_result<T>(
     result: anyhow::Result<T>,
@@ -938,6 +977,89 @@ pub(crate) fn start_with_limiter(
                 }
                 continue;
             }
+            let action = match action {
+                Action::PgAdminOpen(base) => {
+                    use arcnix_core::pgadmin;
+                    let connection = connection()
+                        .map(|(profile, (fingerprint, _))| {
+                            pgadmin::saved_connection(&base, profile, fingerprint)
+                        })
+                        .unwrap_or_default();
+                    send(Update::PgAdmin(crate::pgadmin_ui::Reply::Opened {
+                        installed: pgadmin::installed(&base).is_some(),
+                        size: pgadmin::local_package()
+                            .map(|_| 0)
+                            .or_else(|| pgadmin::package().map(|asset| asset.size)),
+                        connection,
+                    }));
+                    continue;
+                }
+                Action::PgAdminInstall(base, cancel) => {
+                    let events = events.clone();
+                    thread::spawn(move || {
+                        pgadmin_install(&base, &cancel, |reply| {
+                            let _ = events.send_blocking(Response {
+                                epoch,
+                                serial,
+                                update: Update::PgAdmin(reply),
+                            });
+                        });
+                    });
+                    continue;
+                }
+                Action::PgAdminStart {
+                    base,
+                    connection: target,
+                    stop,
+                } => {
+                    let access = connection().map(|(profile, access)| {
+                        let (fingerprint, secret) = access.clone();
+                        (profile.clone(), fingerprint, secret)
+                    });
+                    let events = events.clone();
+                    let generation = generation.clone();
+                    thread::spawn(move || {
+                        use crate::pgadmin_ui::Reply;
+                        use arcnix_core::pgadmin;
+                        let reply = |reply| {
+                            let _ = events.send_blocking(Response {
+                                epoch,
+                                serial,
+                                update: Update::PgAdmin(reply),
+                            });
+                        };
+                        let result = (|| {
+                            let (profile, fingerprint, secret) =
+                                access.context("Connect a server first")?;
+                            let component =
+                                pgadmin::installed(&base).context("pgAdmin is not installed")?;
+                            pgadmin::run(
+                                &base,
+                                &component,
+                                &profile,
+                                &fingerprint,
+                                secret,
+                                &target,
+                                || {
+                                    stop.load(Ordering::Acquire)
+                                        || generation.load(Ordering::Acquire) != epoch
+                                },
+                                |event| {
+                                    reply(match event {
+                                        pgadmin::Event::Ready(url) => Reply::Ready(url),
+                                        pgadmin::Event::Unreachable(diagnosis) => {
+                                            Reply::Unreachable(diagnosis)
+                                        }
+                                    })
+                                },
+                            )
+                        })();
+                        reply(Reply::Ended(result.map_err(|error| format!("{error:#}"))));
+                    });
+                    continue;
+                }
+                action => action,
+            };
             if let Action::ServerApps(action) = action {
                 let outcome = (|| {
                     anyhow::ensure!(

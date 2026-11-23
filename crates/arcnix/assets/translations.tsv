@@ -2774,3 +2774,21 @@ PDF 密码	PDF password
 停止校验	Stop verification
 服务器将计算 SHA-256。重新连接后可在服务器记录中查看结果。	The server computes SHA-256. Find the result in Server records after reconnecting.
 确认停止服务器上的本次校验。	Confirm stopping this verification on the server.
+正在检查 pgAdmin…	Checking pgAdmin…
+尚未安装 pgAdmin	pgAdmin is not installed
+Arcnix 在本机保存自己的 pgAdmin，不会在服务器上安装任何内容。	Arcnix keeps its own copy of pgAdmin on this computer. Nothing is installed on the server.
+此版本的 Arcnix 尚未提供适用于本系统的 pgAdmin 下载。	This version of Arcnix has no pgAdmin download for this system yet.
+安装 pgAdmin	Install pgAdmin
+正在安装 pgAdmin…	Installing pgAdmin…
+连接 PostgreSQL	Connect to PostgreSQL
+地址由服务器解析并通过 SSH 访问。数据库密码由 pgAdmin 询问。	The address is resolved on the server and reached through SSH. pgAdmin asks for the database password.
+PostgreSQL 主机	PostgreSQL host
+PostgreSQL 端口	PostgreSQL port
+打开 pgAdmin	Open pgAdmin
+正在启动 pgAdmin…	Starting pgAdmin…
+重新加载 pgAdmin	Reload pgAdmin
+关闭数据库连接	Close database connection
+未被遮挡时在此显示 pgAdmin。	pgAdmin shows here when nothing covers it.
+SSH 服务器不允许转发到此 PostgreSQL 地址。	The SSH server does not allow forwarding to this PostgreSQL address.
+服务器无法连接 PostgreSQL。请检查其是否运行以及地址是否正确。	The server could not reach PostgreSQL. Check that it is running and the address is correct.
+无法通过 SSH 打开 PostgreSQL 连接。	The PostgreSQL connection could not be opened through SSH.

@@ -1,6 +1,8 @@
 #[cfg(windows)]
 pub(crate) mod browser_cookies;
 pub(crate) mod image_viewer;
+#[cfg(target_os = "macos")]
+pub(crate) mod mac_surface;
 #[cfg(windows)]
 pub(crate) mod mpv_native;
 pub(crate) mod native_viewport;

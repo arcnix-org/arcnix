@@ -77,6 +77,7 @@ icons! {
     ExitFullscreen => "exit-fullscreen";
     Pin => "pin";
     Docker => "docker", "docker";
+    Database => "database", "pgadmin";
     Disks => "disks", "disks";
     Monitor => "monitor", "monitor";
     AppCenter => "app-center", "center";

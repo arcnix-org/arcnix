@@ -354,13 +354,16 @@ fn discover(ui: Ui) -> impl Widget {
         }),
     ))
 }
+fn pgadmin_available(s: &State) -> bool {
+    server_desktop::available_apps(s).contains(&WorkspacePage::PgAdmin)
+}
 fn detail(ui: Ui) -> impl Widget {
     let state = ui.state;
     each(state.map(|s|s.software.app_center.selected.and_then(catalog::get).into_iter().collect::<Vec<_>>())).key(|a|a.id).children(move|item|{
-        let app=item.value.get();let install=ui.clone();
+        let app=item.value.get();let install=ui.clone();let pgadmin=ui.clone();
         col().class("app-center-detail").fill((
             text_action("Back",Icon::ChevronRight).class("button with-icon app-center-back").on_press(move||state.revise(|s|s.software.app_center.view=0)),
-            row().class("app-center-detail-header").fill((badge(app),col().class("app-center-detail-identity").fill((text().class("app-center-detail-name").content(app.name),text().class("subtle").content(i18n::bind(app.category.label())),text().class("app-center-detail-summary").content(i18n::bind(app.summary)))),btn("Install…",move||install.install_catalog_app(app.id)).class("button primary app-center-install-button").enabled(state.map(move |s|can_install(s, app))))),
+            row().class("app-center-detail-header").fill((badge(app),col().class("app-center-detail-identity").fill((text().class("app-center-detail-name").content(app.name),text().class("subtle").content(i18n::bind(app.category.label())),text().class("app-center-detail-summary").content(i18n::bind(app.summary)))),when(state.map(move|s|app.id=="postgresql"&&pgadmin_available(s)),move||{let pgadmin=pgadmin.clone();btn("Open pgAdmin",move||pgadmin.open_desktop_app(WorkspacePage::PgAdmin))}),btn("Install…",move||install.install_catalog_app(app.id)).class("button primary app-center-install-button").enabled(state.map(move |s|can_install(s, app))))),
             col().class("app-center-detail-section").fill((text().class("section-title").content(i18n::bind("Common uses")),text().class("app-center-detail-uses").content(i18n::bind(app.uses)))),
             col().class("app-center-detail-section").fill((text().class("section-title").content(i18n::bind("Project website")),text().class("app-center-website").selectable(true).content(app.website))),
             help_ui::tip("Application catalog","Built-in application descriptions are available offline. Installation uses the server's enabled repositories or the selected publisher's snap/image. Versions and package availability vary; package installation may require additional service initialization. No third-party repository is added automatically."),
@@ -398,6 +401,7 @@ fn installed_page(ui: Ui) -> impl Widget {
                 let container_ui = ui.clone();
                 let service = ui.clone();
                 let docker = ui.clone();
+                let pgadmin = ui.clone();
                 let initial = value.get();
                 row().class("app-center-installed-row").fill((
                     text()
@@ -449,6 +453,24 @@ fn installed_page(ui: Ui) -> impl Widget {
                                         let docker = docker.clone();
                                         btn("Open Docker", move || {
                                             docker.open_desktop_app(WorkspacePage::Docker)
+                                        })
+                                    }
+                                },
+                            ),
+                            when(
+                                state.map(move |s| {
+                                    pgadmin_available(s)
+                                        && value
+                                            .get()
+                                            .app()
+                                            .is_some_and(|app| app.id == "postgresql")
+                                }),
+                                {
+                                    let pgadmin = pgadmin.clone();
+                                    move || {
+                                        let pgadmin = pgadmin.clone();
+                                        btn("Open pgAdmin", move || {
+                                            pgadmin.open_desktop_app(WorkspacePage::PgAdmin)
                                         })
                                     }
                                 },

@@ -2,6 +2,8 @@
 
 ## 未发布
 
+- macOS 新增 pgAdmin 窗口。首次打开时下载由 arcnix-org/pgadmin4 构建的 pgAdmin 组件，后端在本机运行，经 SSH 连接服务器上的 PostgreSQL。可从 Apps 或 App Center 的 PostgreSQL 打开，查询结果和导出文件保存到「下载」。
+
 ## 0.3.5 — 2026-11-23
 
 - macOS Apple Silicon 改用 DMG 安装包，可将 Arcnix.app 拖到「应用程序」。

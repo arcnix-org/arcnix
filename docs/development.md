@@ -151,6 +151,12 @@ Ctrl+C 在有选中文字时复制，否则向远程程序发送中断；Ctrl+Sh
 
 采样与日志命令依据 [Linux proc 文档](https://www.kernel.org/doc/html/latest/filesystems/proc.html) 和 [journalctl 官方手册](https://www.freedesktop.org/software/systemd/man/latest/journalctl.html)。
 
+## pgAdmin
+
+macOS 的 pgAdmin 窗口运行 pgAdmin 的桌面模式后端。后端随 Arcnix 管理的组件下载：便携 Python 加上官方 pgAdmin 发布包，由 [arcnix-org/pgadmin4](https://github.com/arcnix-org/pgadmin4) 的 `arcnix-build` 分支构建并发布。`crates/arcnix-core/src/software/pgadmin.rs` 固定当前版本组件的 URL、大小和 SHA-256，升级成功后删除旧版本。每台服务器的每个数据库使用独立的数据目录。后端只监听本机回环地址，要求每次启动生成的密钥，经固定目标的 SSH 转发连接 PostgreSQL。窗口内的 WebView 只能加载该后端，复用 Code 窗口的裁切层，下载保存到「下载」。
+
+`cargo test -p arcnix-core --test pgadmin_integration -- --ignored --nocapture` 使用真实组件、回环 SSH 和 PostgreSQL，需设置 `ARCNIX_TEST_PGADMIN_PACKAGE`、`ARCNIX_TEST_SSH_PORT`、`ARCNIX_TEST_SSH_USER`、`ARCNIX_TEST_SSH_KEY` 和 `ARCNIX_TEST_POSTGRES_PORT`。调试构建可用 `ARCNIX_PGADMIN_PACKAGE` 指定本地组件包。
+
 ## 第一版边界
 
 - 可保存多台服务器；一个窗口同一时间连接一台服务器，传输串行排队。切换服务器会取消当前传输和排队任务。

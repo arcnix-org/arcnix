@@ -15,7 +15,7 @@ use objc2_foundation::{NSNotificationCenter, NSObjectProtocol};
 #[cfg(target_os = "macos")]
 use tao::platform::macos::WindowExtMacOS;
 
-use crate::{Ui, WorkspacePage, code_native};
+use crate::{Ui, WorkspacePage, code_native, pgadmin_native};
 
 pub(crate) struct DesktopWindow {
     ui: Ui,
@@ -26,6 +26,7 @@ pub(crate) struct DesktopWindow {
     wake: Option<Waker>,
     epoch: Option<u64>,
     code: HashMap<u64, code_native::Host>,
+    pgadmin: HashMap<u64, pgadmin_native::Host>,
     #[cfg(target_os = "macos")]
     icon_installed: bool,
     #[cfg(windows)]
@@ -51,6 +52,7 @@ impl DesktopWindow {
             wake: None,
             epoch: None,
             code: HashMap::new(),
+            pgadmin: HashMap::new(),
             #[cfg(target_os = "macos")]
             icon_installed: false,
             #[cfg(windows)]
@@ -190,6 +192,9 @@ impl NativeLifecycle for DesktopWindow {
                 if let Some(code) = self.code.get_mut(&old) {
                     code.hide();
                 }
+                if let Some(pgadmin) = self.pgadmin.get_mut(&old) {
+                    pgadmin.hide();
+                }
                 #[cfg(windows)]
                 if let Some(browser) = self.browsers.get_mut(&old) {
                     browser.hide();
@@ -199,13 +204,27 @@ impl NativeLifecycle for DesktopWindow {
         }
         // Code remains available in read-only sessions where Terminal is disabled.
         state.with(|s| {
-            self.code.retain(|&id, _| {
+            let live = |id: u64| {
                 epoch == Some(id)
                     || s.parked
                         .values()
                         .any(|session| session.connected && session.epoch == id)
-            });
+            };
+            self.code.retain(|&id, _| live(id));
+            self.pgadmin.retain(|&id, _| live(id));
         });
+        if let Some(epoch) = epoch {
+            if state.with(|s| s.pgadmin.url().is_some()) {
+                self.pgadmin
+                    .entry(epoch)
+                    .or_insert_with(|| {
+                        pgadmin_native::Host::new(self.ui.clone(), self.wake.clone())
+                    })
+                    .poll(window);
+            } else {
+                self.pgadmin.remove(&epoch);
+            }
+        }
         if let Some(epoch) = epoch {
             if code_open {
                 self.code

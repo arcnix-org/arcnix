@@ -78,6 +78,7 @@ pub(crate) fn app_id(page: WorkspacePage) -> Option<DesktopApp> {
         WorkspacePage::PdfReader => DesktopApp::PdfReader,
         WorkspacePage::Browser => DesktopApp::Browser,
         WorkspacePage::Settings => DesktopApp::Settings,
+        WorkspacePage::PgAdmin => DesktopApp::PgAdmin,
         _ => return None,
     })
 }
@@ -98,6 +99,7 @@ pub(crate) fn app_page(app: DesktopApp) -> WorkspacePage {
         DesktopApp::PdfReader => WorkspacePage::PdfReader,
         DesktopApp::Browser => WorkspacePage::Browser,
         DesktopApp::Settings => WorkspacePage::Settings,
+        DesktopApp::PgAdmin => WorkspacePage::PgAdmin,
     }
 }
 
@@ -211,7 +213,7 @@ fn focus_window(ui: &Ui, input: &str) {
     }
 }
 
-pub(crate) const APP_LAUNCHERS: [WorkspacePage; 12] = [
+pub(crate) const APP_LAUNCHERS: [WorkspacePage; 13] = [
     WorkspacePage::Files(0),
     WorkspacePage::Terminal,
     WorkspacePage::Code,
@@ -221,6 +223,7 @@ pub(crate) const APP_LAUNCHERS: [WorkspacePage; 12] = [
     WorkspacePage::PdfReader,
     WorkspacePage::Monitor,
     WorkspacePage::Docker,
+    WorkspacePage::PgAdmin,
     WorkspacePage::AppCenter,
     WorkspacePage::Settings,
     WorkspacePage::Editor,
@@ -255,6 +258,8 @@ pub(crate) fn available_apps(s: &State) -> Vec<WorkspacePage> {
         .filter(|page| s.local_desktop.is_none() || local_app(s, *page))
         .filter(|page| match page {
             WorkspacePage::Browser => cfg!(windows),
+            // Only this platform's component has been tested.
+            WorkspacePage::PgAdmin => cfg!(target_os = "macos"),
             WorkspacePage::Docker => s.server_apps.applications.docker,
             _ => true,
         })
@@ -263,6 +268,7 @@ pub(crate) fn available_apps(s: &State) -> Vec<WorkspacePage> {
 pub(crate) fn app_label(page: WorkspacePage) -> &'static str {
     match page.base() {
         WorkspacePage::Docker => "Docker",
+        WorkspacePage::PgAdmin => "pgAdmin",
         WorkspacePage::Files(_) => "文件管理",
         WorkspacePage::Code => "Code Editor",
         WorkspacePage::Editor => "Text Editor",
@@ -326,6 +332,7 @@ fn window_mut(s: &mut State, page: WorkspacePage, app: DesktopApp) -> &mut Deskt
 pub(crate) fn app_class(page: WorkspacePage) -> &'static str {
     match page.base() {
         WorkspacePage::Docker => "app-docker",
+        WorkspacePage::PgAdmin => "app-pgadmin",
         WorkspacePage::Files(_) => "app-files",
         WorkspacePage::Code => "app-code",
         WorkspacePage::Editor => "app-editor",
@@ -363,6 +370,7 @@ pub(crate) fn app_icon(page: WorkspacePage) -> Icon {
         WorkspacePage::PdfReader => Icon::File,
         WorkspacePage::Browser => Icon::Browser,
         WorkspacePage::Docker => Icon::Docker,
+        WorkspacePage::PgAdmin => Icon::Database,
         _ => Icon::Grid,
     }
 }
@@ -580,6 +588,7 @@ impl Ui {
             self.refresh_desktop_items(false);
         }
         self.docker_enter();
+        self.pgadmin_enter();
         self.terminal_enter();
         self.observability_enter();
         self.app_center_enter();
@@ -749,6 +758,9 @@ impl Ui {
         if page == WorkspacePage::Code {
             crate::code_terminal::close_all(self);
             self.state.revise(|s| s.code = Default::default());
+        }
+        if page == WorkspacePage::PgAdmin {
+            self.state.revise(pgadmin_ui::reset);
         }
         if page == WorkspacePage::PdfReader {
             self.state.revise(|s| s.pdf = Default::default());
@@ -1020,6 +1032,7 @@ fn app_window(ui: Ui, page: WorkspacePage) -> impl Widget {
     let tools = match page.base() {
         WorkspacePage::Terminal => fragment(terminal::header(ui.clone(), id)),
         WorkspacePage::Code => fragment(code_workbench::title_tools(ui.clone())),
+        WorkspacePage::PgAdmin => fragment(pgadmin_ui::title_tools(ui.clone())),
         WorkspacePage::Files(id) => fragment((
             files_ui::sidebar_toggle(ui.clone()),
             files_tabs::tab_strip(ui.clone(), id),
@@ -1063,6 +1076,7 @@ fn app_window(ui: Ui, page: WorkspacePage) -> impl Widget {
         WorkspacePage::AppCenter => fragment(app_center_ui::page(ui)),
         WorkspacePage::Settings => fragment(server_apps_ui::settings(ui)),
         WorkspacePage::Docker => fragment(docker_ui::page(ui)),
+        WorkspacePage::PgAdmin => fragment(pgadmin_ui::page(ui)),
         WorkspacePage::Code => fragment(code_workbench::page(ui)),
         WorkspacePage::Editor => fragment(text_editor::page(ui, id)),
         WorkspacePage::Player => fragment(video_player::panel(ui)),

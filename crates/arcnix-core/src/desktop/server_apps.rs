@@ -234,10 +234,11 @@ pub enum DesktopApp {
     Trash,
     Browser,
     Settings,
+    PgAdmin,
 }
 
 impl DesktopApp {
-    pub const COUNT: usize = 16;
+    pub const COUNT: usize = 17;
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
