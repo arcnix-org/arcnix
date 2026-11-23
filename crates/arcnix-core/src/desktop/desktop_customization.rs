@@ -113,6 +113,40 @@ fn discard_magnification<'de, D: serde::Deserializer<'de>>(
     bool::deserialize(deserializer).map(|_| ())
 }
 
+/// Read a list that names desktop apps, skipping apps this version does not
+/// know. Settings saved by a newer Arcnix then still load here.
+pub(crate) fn known_apps<'de, D, T>(deserializer: D) -> std::result::Result<Vec<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: serde::de::DeserializeOwned,
+{
+    let mut items = Vec::new();
+    for value in Vec::<serde_json::Value>::deserialize(deserializer)? {
+        match serde_json::from_value(value.clone()) {
+            Ok(item) => items.push(item),
+            Err(_) if names_unknown_app(&value) => {}
+            Err(error) => return Err(serde::de::Error::custom(error)),
+        }
+    }
+    Ok(items)
+}
+
+/// An app written as `"name"` or `{"kind": "app", "id": "name"}`.
+fn names_unknown_app(value: &serde_json::Value) -> bool {
+    use serde_json::Value;
+    let name = match value {
+        Value::String(_) => value,
+        Value::Object(map) if map.get("kind").and_then(Value::as_str) == Some("app") => {
+            match map.get("id") {
+                Some(id @ Value::String(_)) => id,
+                _ => return false,
+            }
+        }
+        _ => return false,
+    };
+    DesktopApp::deserialize(name).is_err()
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 #[allow(
@@ -120,10 +154,13 @@ fn discard_magnification<'de, D: serde::Deserializer<'de>>(
     reason = "The unit field accepts legacy serialized dock settings"
 )]
 pub struct Dock {
+    #[serde(deserialize_with = "known_apps")]
     pub order: Vec<DockItem>,
+    #[serde(deserialize_with = "known_apps")]
     pub unpinned: Vec<DesktopApp>,
     /// Explicit pins for applications outside the default set. Legacy order is only a layout hint.
     #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(deserialize_with = "known_apps")]
     pub extra_pins: Vec<DesktopApp>,
     #[serde(deserialize_with = "appearance_value")]
     pub size: DockSize,
@@ -260,7 +297,9 @@ impl Layout {
 pub struct Appearance {
     pub show_server: bool,
     pub show_apps: bool,
+    #[serde(deserialize_with = "known_apps")]
     pub order: Vec<Shortcut>,
+    #[serde(deserialize_with = "known_apps")]
     pub hidden: Vec<DesktopApp>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(deserialize_with = "appearance_value")]
