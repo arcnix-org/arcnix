@@ -94,13 +94,30 @@ def main():
         add_server(root, data, server)
         if not update_server(database, server):
             raise SystemExit('pgAdmin did not save the server connection')
-    os.environ['PGADMIN_INT_PORT'] = str(request['port'])
     os.environ['PGADMIN_INT_KEY'] = request['key']
     os.environ['PGADMIN_SERVER_MODE'] = 'OFF'
     sys.path.insert(0, root)
     program = os.path.join(root, 'pgAdmin4.py')
     sys.argv = [program]
-    runpy.run_path(program, run_name='__main__')
+    from werkzeug.serving import WSGIRequestHandler, make_server
+
+    class RequestHandler(WSGIRequestHandler):
+        def log_request(self, code='-', size='-'):
+            # The initial WebView URL contains the private desktop key.
+            pass
+
+    # Keep the same socket from port selection through the last request.
+    # The Socket.IO middleware is part of pgAdmin's initialized WSGI app.
+    with make_server('127.0.0.1', 0, None, threaded=True,
+                     request_handler=RequestHandler) as backend:
+        port = backend.server_port
+        os.environ['PGADMIN_INT_PORT'] = str(port)
+        backend.app = runpy.run_path(program)['app']
+        path = os.path.join(data, 'backend.ready')
+        with open(path + '.tmp', 'w', encoding='ascii') as file:
+            file.write(f"{request['launch']} {port}")
+        os.replace(path + '.tmp', path)
+        backend.serve_forever()
 
 
 main()

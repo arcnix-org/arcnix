@@ -2,7 +2,6 @@
 //! whose desktop-mode backend reaches PostgreSQL through the SSH connection.
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
-use std::net::{Ipv4Addr, TcpListener};
 use std::path::{Component as PathPart, Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
@@ -530,13 +529,11 @@ fn backend(
             .map(|b| format!("{b:02x}"))
             .collect::<String>(),
     );
-    let port = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))?
-        .local_addr()?
-        .port();
+    let launch = crate::new_id();
     let request = Zeroizing::new(serde_json::to_vec(&serde_json::json!({
         "root": component.root,
         "data": data,
-        "port": port,
+        "launch": launch,
         "key": key.as_str(),
         "server": {
             "name": connection.name(),
@@ -595,14 +592,9 @@ fn backend(
     input.write_all(b"\n")?;
     input.flush()?;
 
-    let address = format!("http://127.0.0.1:{port}/");
-    let client = reqwest::blocking::Client::builder()
-        .no_proxy()
-        .redirect(reqwest::redirect::Policy::none())
-        .timeout(Duration::from_secs(5))
-        .build()?;
+    let ready_path = data.join("backend.ready");
     let deadline = Instant::now() + START_TIMEOUT;
-    loop {
+    let port = loop {
         if finished() {
             return Ok(());
         }
@@ -612,13 +604,13 @@ fn backend(
                 tail(&log_path)
             );
         }
-        let answered = client
-            .get(format!("{address}misc/ping"))
-            .query(&[("key", key.as_str())])
-            .send()
-            .is_ok_and(|response| response.status().is_success());
-        if answered {
-            break;
+        if let Ok(record) = fs::read_to_string(&ready_path)
+            && let Some((id, value)) = record.split_once(' ')
+            && id == launch
+        {
+            break value
+                .parse::<u16>()
+                .context("Invalid pgAdmin backend port")?;
         }
         ensure!(
             Instant::now() < deadline,
@@ -626,8 +618,8 @@ fn backend(
             tail(&log_path)
         );
         std::thread::sleep(Duration::from_millis(200));
-    }
-    ready(format!("{address}?key={}", key.as_str()));
+    };
+    ready(format!("http://127.0.0.1:{port}/?key={}", key.as_str()));
     while !finished() {
         if let Some(status) = child.0.try_wait()? {
             bail!("pgAdmin stopped ({status}). {}", tail(&log_path));

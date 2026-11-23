@@ -14,11 +14,12 @@ use crate::*;
 /// Navigation stays on the backend this window started. pgAdmin opens each
 /// tool in an inline frame (`about:srcdoc`) that then posts to the backend.
 fn same_origin(origin: &str, url: &str) -> bool {
-    url == "about:blank"
-        || url == "about:srcdoc"
-        || url
-            .strip_prefix(origin)
-            .is_some_and(|rest| rest.is_empty() || rest.starts_with(['/', '?', '#']))
+    url.strip_prefix(origin)
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with(['/', '?', '#']))
+}
+
+fn navigable(origin: &str, url: &str) -> bool {
+    matches!(url, "about:blank" | "about:srcdoc") || same_origin(origin, url)
 }
 
 /// The WebView and, on macOS, the surface that clips it to what the desktop
@@ -57,16 +58,12 @@ fn position(view: &View, viewport: &native_viewport::Viewport) -> Result<()> {
 
 /// Files pgAdmin saves: links to its own blobs and data, or backend attachments.
 fn downloadable(origin: &str, url: &str) -> bool {
-    url.starts_with("data:")
-        || url
-            .strip_prefix("blob:")
-            .is_some_and(|rest| same_origin(origin, rest) && rest != "about:blank")
-        || (url.starts_with(origin) && same_origin(origin, url))
+    url.starts_with("data:") || same_origin(origin, url.strip_prefix("blob:").unwrap_or(url))
 }
 
 /// Keep only the name WebKit suggested, inside the Downloads folder, without
 /// replacing an existing file.
-fn destination(folder: &Path, suggested: &Path) -> Option<PathBuf> {
+fn destination(folder: &Path, suggested: &Path, pending: &[(String, PathBuf)]) -> Option<PathBuf> {
     let name = suggested.file_name()?.to_str()?;
     if name.starts_with('.') || name.chars().any(|c| c.is_control() || c == ':') {
         return None;
@@ -77,7 +74,11 @@ fn destination(folder: &Path, suggested: &Path) -> Option<PathBuf> {
     };
     let mut path = folder.join(name);
     for counter in 1..1000 {
-        if !path.exists() {
+        if path
+            .symlink_metadata()
+            .is_err_and(|err| err.kind() == std::io::ErrorKind::NotFound)
+            && !pending.iter().any(|(_, other)| *other == path)
+        {
             return Some(path);
         }
         path = folder.join(format!("{stem} ({counter}){extension}"));
@@ -138,19 +139,18 @@ impl Host {
             .with_initialization_script(
                 "addEventListener('pointerdown', () => window.ipc.postMessage('focus'), true);",
             )
-            .with_navigation_handler(move |target| same_origin(&allowed, &target))
+            .with_navigation_handler(move |target| navigable(&allowed, &target))
             .with_new_window_req_handler(|_, _| wry::NewWindowResponse::Deny)
             .with_permission_handler(|_| wry::PermissionResponse::Deny)
             .with_download_started_handler(move |url, path| {
+                let mut started = started.borrow_mut();
                 let Some(target) = downloads_folder()
                     .filter(|_| downloadable(&source, &url))
-                    .and_then(|folder| destination(&folder, path))
+                    .and_then(|folder| destination(&folder, path, &started))
                 else {
                     return false;
                 };
                 *path = target.clone();
-                let mut started = started.borrow_mut();
-                started.retain(|(_, path)| !path.exists());
                 started.push((url, target));
                 true
             })
@@ -278,7 +278,7 @@ mod tests {
             "about:blank",
             "about:srcdoc",
         ] {
-            assert!(same_origin(origin, url), "{url}");
+            assert!(navigable(origin, url), "{url}");
         }
         for url in [
             "http://127.0.0.1:50501/",
@@ -289,7 +289,7 @@ mod tests {
             "about:srcdoc#x",
             "data:text/html,x",
         ] {
-            assert!(!same_origin(origin, url), "{url}");
+            assert!(!navigable(origin, url), "{url}");
         }
         assert!(super::origin("http://example.com/").is_none());
         for url in [
@@ -302,6 +302,7 @@ mod tests {
         for url in [
             "blob:http://127.0.0.1:5051/0c7e",
             "blob:about:blank",
+            "blob:about:srcdoc",
             "https://example.com/file.csv",
             "file:///etc/hosts",
         ] {
@@ -314,19 +315,31 @@ mod tests {
         let folder =
             std::env::temp_dir().join(format!("arcnix-downloads-{}", arcnix_core::new_id()));
         std::fs::create_dir(&folder).unwrap();
-        let first = destination(&folder, Path::new("/elsewhere/orders.csv")).unwrap();
+        let first = destination(&folder, Path::new("/elsewhere/orders.csv"), &[]).unwrap();
         assert_eq!(first, folder.join("orders.csv"));
+        assert_eq!(
+            destination(
+                &folder,
+                Path::new("orders.csv"),
+                &[(String::new(), first.clone())]
+            )
+            .unwrap(),
+            folder.join("orders (1).csv")
+        );
         std::fs::write(&first, "").unwrap();
         assert_eq!(
-            destination(&folder, Path::new("orders.csv")).unwrap(),
+            destination(&folder, Path::new("orders.csv"), &[]).unwrap(),
             folder.join("orders (1).csv")
         );
         assert_eq!(
-            destination(&folder, Path::new("README")).unwrap(),
+            destination(&folder, Path::new("README"), &[]).unwrap(),
             folder.join("README")
         );
         for name in [".profile", "..", "a\nb.csv"] {
-            assert!(destination(&folder, Path::new(name)).is_none(), "{name}");
+            assert!(
+                destination(&folder, Path::new(name), &[]).is_none(),
+                "{name}"
+            );
         }
         std::fs::remove_dir_all(folder).unwrap();
     }
