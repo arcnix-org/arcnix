@@ -504,11 +504,7 @@ impl Ui {
             dismiss_menus(s);
         });
         self.desktop_enter();
-        if connect_now
-            && self
-                .state
-                .with(|s| !s.connection_active() && !s.connecting)
-        {
+        if connect_now && self.state.with(|s| !s.connection_active() && !s.connecting) {
             self.request_connect();
         }
     }
@@ -2511,7 +2507,10 @@ mod tests {
         for supported in [false, true] {
             state.local_terminal_supported = supported;
             assert_eq!(state.terminal_available(), supported);
-            assert_eq!(server_desktop::available_apps(&state).contains(&WorkspacePage::Terminal), supported);
+            assert_eq!(
+                server_desktop::available_apps(&state).contains(&WorkspacePage::Terminal),
+                supported
+            );
         }
         state.local_terminal_supported = false;
         state.local_desktop = None;

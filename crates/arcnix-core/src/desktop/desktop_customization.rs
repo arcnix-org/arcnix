@@ -120,31 +120,35 @@ where
     D: Deserializer<'de>,
     T: serde::de::DeserializeOwned,
 {
-    let mut items = Vec::new();
-    for value in Vec::<serde_json::Value>::deserialize(deserializer)? {
-        match serde_json::from_value(value.clone()) {
-            Ok(item) => items.push(item),
-            Err(_) if names_unknown_app(&value) => {}
-            Err(error) => return Err(serde::de::Error::custom(error)),
-        }
-    }
-    Ok(items)
+    read_app_list(deserializer, unknown_app_name)
 }
 
-/// An app written as `"name"` or `{"kind": "app", "id": "name"}`.
-fn names_unknown_app(value: &serde_json::Value) -> bool {
-    use serde_json::Value;
-    let name = match value {
-        Value::String(_) => value,
-        Value::Object(map) if map.get("kind").and_then(Value::as_str) == Some("app") => {
-            match map.get("id") {
-                Some(id @ Value::String(_)) => id,
-                _ => return false,
-            }
-        }
-        _ => return false,
-    };
-    DesktopApp::deserialize(name).is_err()
+pub(crate) fn known_shortcuts<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<Shortcut>, D::Error> {
+    read_app_list(deserializer, |value| {
+        value.get("kind").and_then(serde_json::Value::as_str) == Some("app")
+            && value.get("id").is_some_and(unknown_app_name)
+    })
+}
+
+fn unknown_app_name(value: &serde_json::Value) -> bool {
+    value.is_string() && DesktopApp::deserialize(value).is_err()
+}
+
+fn read_app_list<'de, D, T>(
+    deserializer: D,
+    skip: impl Fn(&serde_json::Value) -> bool,
+) -> Result<Vec<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: serde::de::DeserializeOwned,
+{
+    Vec::<serde_json::Value>::deserialize(deserializer)?
+        .into_iter()
+        .filter(|value| !skip(value))
+        .map(|value| serde_json::from_value(value).map_err(serde::de::Error::custom))
+        .collect()
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -297,7 +301,7 @@ impl Layout {
 pub struct Appearance {
     pub show_server: bool,
     pub show_apps: bool,
-    #[serde(deserialize_with = "known_apps")]
+    #[serde(deserialize_with = "known_shortcuts")]
     pub order: Vec<Shortcut>,
     #[serde(deserialize_with = "known_apps")]
     pub hidden: Vec<DesktopApp>,

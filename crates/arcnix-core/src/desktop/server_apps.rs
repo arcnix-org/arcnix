@@ -701,6 +701,9 @@ mod tests {
         for broken in [
             r#"{"appearance":{"order":[{"kind":"widget","id":"x"}]}}"#,
             r#"{"appearance":{"order":[{"kind":"app","id":7}]}}"#,
+            r#"{"appearance":{"order":["later_app"]}}"#,
+            r#"{"appearance":{"hidden":[{"kind":"app","id":"later_app"}]}}"#,
+            r#"{"appearance":{"dock":{"order":[{"kind":"app","id":"later_app"}]}}}"#,
             r#"{"appearance":{"hidden":[7]}}"#,
             r#"{"appearance":{"dock":{"order":[{"system":"nowhere"}]}}}"#,
         ] {

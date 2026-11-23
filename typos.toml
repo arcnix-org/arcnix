@@ -4,6 +4,17 @@ extend-exclude = ["/target/**", "/artifacts/**", "Cargo.lock", "crates/arcnix/as
 [default.extend-words]
 arcnix = "arcnix"
 
+[type.rust.extend-identifiers]
+# lsof field selectors.
+FpcftPn = "FpcftPn"
+
+[type.powershell]
+extend-glob = ["*.ps1"]
+
+[type.powershell.extend-words]
+# Case-insensitive inequality operator.
+ine = "ine"
+
 [type.js.extend-words]
 # HTMLMediaElement event name.
 seeked = "seeked"

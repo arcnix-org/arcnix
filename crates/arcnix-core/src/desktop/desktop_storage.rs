@@ -5,7 +5,9 @@ use sha2::{Digest, Sha256};
 
 use crate::Theme;
 use crate::browser::Bookmark;
-use crate::desktop_customization::{Appearance, Dock, Layout, Shortcut, Wallpaper, known_apps};
+use crate::desktop_customization::{
+    Appearance, Dock, Layout, Shortcut, Wallpaper, known_apps, known_shortcuts,
+};
 use crate::desktop_shortcuts::Shortcuts;
 use crate::desktop_theme::{Overrides, Preset, Themes, appearance_value, built_in_wallpaper};
 use crate::server_apps::{
@@ -81,7 +83,7 @@ impl Default for System {
 struct Shell {
     show_server: bool,
     show_apps: bool,
-    #[serde(deserialize_with = "known_apps")]
+    #[serde(deserialize_with = "known_shortcuts")]
     order: Vec<Shortcut>,
     #[serde(deserialize_with = "known_apps")]
     hidden: Vec<App>,

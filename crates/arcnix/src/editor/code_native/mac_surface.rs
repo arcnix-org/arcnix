@@ -1,6 +1,7 @@
 //! Keep the embedded WKWebView interactive only where the desktop exposes it.
 use anyhow::{Context, Result};
-use objc2::{DefinedClass, MainThreadOnly, define_class, msg_send, rc::Retained};
+use objc2::rc::Retained;
+use objc2::{DefinedClass, MainThreadOnly, define_class, msg_send};
 use objc2_app_kit::NSView;
 use objc2_core_graphics::{CGMutablePath, CGPath};
 use objc2_foundation::{NSPoint, NSRect, NSSize};
