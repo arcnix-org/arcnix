@@ -41,6 +41,19 @@ def main():
                 action(name, 'Connect to server')
                 expect(server(name).locator('.host-connection')).to_have_text('Connected')
 
+            # The generic text-field styles must not push this checkbox above its caption.
+            label = page.locator('.tree-connected-filter')
+            expect(toggle).to_be_visible()
+            box = toggle.bounding_box()
+            assert abs(box['width'] - 16) < 1 and abs(box['height'] - 16) < 1, box
+            assert label.evaluate("""label => {
+                const box = label.querySelector('input').getBoundingClientRect();
+                const range = document.createRange();
+                range.selectNodeContents(label.lastChild);
+                const caption = range.getBoundingClientRect();
+                return caption.left >= box.right && caption.top < box.bottom && caption.bottom > box.top;
+            }"""), 'The checkbox and its caption must share one row'
+
             toggle.check()
             expect(tree.locator('.tree-no-results')).to_have_text('No matching connected servers')
             toggle.uncheck()

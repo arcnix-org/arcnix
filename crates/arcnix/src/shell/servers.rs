@@ -336,7 +336,7 @@ pub(crate) fn sidebar(ui: Ui) -> impl Widget {
                 .content(""),
         )),
         sapid::checkbox()
-            .class("tree-connected-filter")
+            .class("preference-check tree-connected-filter")
             .label(i18n::bind("只看已连接"))
             .checked(state.map(|s| s.connected_servers_only))
             .on_checked_change(move |checked| state.revise(|s| s.connected_servers_only = checked)),
