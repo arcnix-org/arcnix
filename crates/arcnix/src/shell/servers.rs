@@ -61,10 +61,7 @@ fn apply_tree_drop(ui: &Ui, value: &str) {
     let Ok(gesture) = serde_json::from_str::<TreeDrop>(value) else {
         return;
     };
-    if ui
-        .state
-        .with(|s| !s.search.trim().is_empty() || s.dialog.is_some())
-    {
+    if ui.state.with(|s| tree_filtered(s) || s.dialog.is_some()) {
         return;
     }
     let result = ui.state.with(|s| -> anyhow::Result<Option<AppConfig>> {
@@ -122,24 +119,28 @@ fn apply_tree_drop(ui: &Ui, value: &str) {
     }
 }
 
-fn expanded(s: &State, id: &str) -> bool {
-    !s.search.trim().is_empty() || !s.collapsed_groups.contains(id)
+fn tree_filtered(s: &State) -> bool {
+    s.connected_servers_only || !s.search.trim().is_empty()
 }
 
-fn matching_servers(s: &State, group: Option<&str>) -> Vec<ServerProfile> {
-    let query = s.search.trim().to_lowercase();
+fn expanded(s: &State, id: &str) -> bool {
+    tree_filtered(s) || !s.collapsed_groups.contains(id)
+}
+
+fn matching_servers<'a>(
+    s: &'a State,
+    group: Option<&'a str>,
+) -> impl Iterator<Item = &'a ServerProfile> {
+    let query = s.search.trim();
     let group_name = group
         .and_then(|id| s.config.groups.iter().find(|g| g.id == id))
         .map(|g| g.name.as_str())
         .unwrap_or_default();
-    s.config
-        .available_servers()
-        .filter(|p| {
-            p.group_id.as_deref() == group
-                && arcnix_core::server_labels::matches(p, group_name, &query)
-        })
-        .cloned()
-        .collect()
+    s.config.available_servers().filter(move |p| {
+        p.group_id.as_deref() == group
+            && (!s.connected_servers_only || s.server_connection(&p.id).0)
+            && (query.is_empty() || arcnix_core::server_labels::matches(p, group_name, query))
+    })
 }
 
 fn group_menu(ui: Ui, id: String) -> impl Widget {
@@ -171,7 +172,7 @@ fn group_menu(ui: Ui, id: String) -> impl Widget {
                 }
                 .to_owned()
             })))
-            .enabled(state.map(|s| s.search.trim().is_empty()))
+            .enabled(state.map(|s| !tree_filtered(s)))
             .on_press(move || {
                 toggle.state.revise(|s| {
                     if !s.collapsed_groups.remove(&toggle_id) {
@@ -243,6 +244,7 @@ fn root_menu(ui: Ui) -> impl Widget {
             collapse.state.revise(|s| {
                 s.collapsed_groups = s.config.groups.iter().map(|g| g.id.clone()).collect();
                 s.search.clear();
+                s.connected_servers_only = false;
                 s.group_menu = None;
             })
         })
@@ -255,6 +257,33 @@ pub(crate) fn sidebar(ui: Ui) -> impl Widget {
     let add = ui.clone();
     let group = ui.clone();
     let menu = ui.clone();
+    let groups = state
+        .map(|s| {
+            let query = s.search.trim().to_lowercase();
+            s.config
+                .groups
+                .iter()
+                .filter(|g| {
+                    (!s.connected_servers_only && g.name.to_lowercase().contains(&query))
+                        || matching_servers(s, Some(&g.id)).next().is_some()
+                })
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+        .with_partial_eq();
+    let group_counts = state
+        .map(|s| {
+            let mut counts = HashMap::<String, (usize, usize)>::new();
+            for server in s.config.available_servers() {
+                if let Some(group) = &server.group_id {
+                    let (total, connected) = counts.entry(group.clone()).or_default();
+                    *total += 1;
+                    *connected += usize::from(s.server_connection(&server.id).0);
+                }
+            }
+            counts
+        })
+        .with_partial_eq();
     col().class("sidebar server-explorer").fill((
         row()
             .class(state.map(|s| {
@@ -306,6 +335,11 @@ pub(crate) fn sidebar(ui: Ui) -> impl Widget {
                 .class("action-glyph glyph-search server-search-icon")
                 .content(""),
         )),
+        sapid::checkbox()
+            .class("tree-connected-filter")
+            .label(i18n::bind("只看已连接"))
+            .checked(state.map(|s| s.connected_servers_only))
+            .on_checked_change(move |checked| state.revise(|s| s.connected_servers_only = checked)),
         input()
             .class("server-tree-input hidden")
             .value("")
@@ -319,7 +353,7 @@ pub(crate) fn sidebar(ui: Ui) -> impl Widget {
             }),
         col()
             .class(state.map(|s| {
-                if s.search.trim().is_empty() {
+                if !tree_filtered(s) {
                     "server-tree server-list"
                 } else {
                     "server-tree server-list reorder-disabled"
@@ -328,18 +362,7 @@ pub(crate) fn sidebar(ui: Ui) -> impl Widget {
             }))
             .name(i18n::bind("服务器树"))
             .fill((
-                each(state.map(|s| {
-                    let query = s.search.trim().to_lowercase();
-                    s.config
-                        .groups
-                        .iter()
-                        .filter(|g| {
-                            g.name.to_lowercase().contains(&query)
-                                || !matching_servers(s, Some(&g.id)).is_empty()
-                        })
-                        .cloned()
-                        .collect::<Vec<_>>()
-                }))
+                each(groups)
                 .key(|g| (g.id.clone(), g.name.clone()))
                 .children({
                     let ui = ui.clone();
@@ -386,18 +409,9 @@ pub(crate) fn sidebar(ui: Ui) -> impl Widget {
                                             text()
                                                 .class("tree-folder-name")
                                                 .content(g.map(|g| g.name.clone())),
-                                            text().class("tree-count").content(state.map(
-                                                move |s| {
-                                                    s.config
-                                                        .available_servers()
-                                                        .filter(|p| {
-                                                            p.group_id.as_deref()
-                                                                == Some(&g.get().id)
-                                                        })
-                                                        .count()
-                                                        .to_string()
-                                                },
-                                            )),
+                                            text().class("tree-count").content(g.map(move |group| {
+                                                group_counts.with(|counts| counts.get(&group.id).map_or(0, |c| c.0)).to_string()
+                                            })),
                                         ))
                                         .on_press(move || {
                                             choose.state.revise(|s| {
@@ -405,13 +419,19 @@ pub(crate) fn sidebar(ui: Ui) -> impl Widget {
                                                 s.group = Some(id.clone());
                                                 s.host_menu = None;
                                                 s.group_menu = None;
-                                                if s.search.trim().is_empty()
+                                                if !tree_filtered(s)
                                                     && !s.collapsed_groups.remove(&id)
                                                 {
                                                     s.collapsed_groups.insert(id);
                                                 }
                                             })
                                         }),
+                                    text().class("tree-connection group-connection").content(
+                                        i18n::bind(g.map(move |group| group_counts.with(|counts| match counts.get(&group.id) {
+                                            Some(&(_, n)) if n > 0 => format!("{n} 台已连接"),
+                                            _ => String::new(),
+                                        })))
+                                    ),
                                     icon_action(format!("{}的分组操作", g.get().name), Icon::More)
                                         .class("icon-button group-more")
                                         .on_press(move || {
@@ -445,7 +465,7 @@ pub(crate) fn sidebar(ui: Ui) -> impl Widget {
                                         server_rows(ui.clone(), Some(id.clone())),
                                         when(
                                             state.map(move |s| {
-                                                matching_servers(s, Some(&id)).is_empty()
+                                                matching_servers(s, Some(&id)).next().is_none()
                                             }),
                                             || {
                                                 text()
@@ -461,31 +481,18 @@ pub(crate) fn sidebar(ui: Ui) -> impl Widget {
                 }),
                 server_rows(ui.clone(), None),
                 when(
-                    state.map(|s| {
-                        !s.search.trim().is_empty()
-                            && !s.config.available_servers().any(|p| {
-                                arcnix_core::server_labels::matches(
-                                    p,
-                                    arcnix_core::target_selection::group_name(&s.config, p)
-                                        .unwrap_or_default(),
-                                    &s.search,
-                                )
-                            })
-                            && !s.config.groups.iter().any(|g| {
-                                g.name
-                                    .to_lowercase()
-                                    .contains(&s.search.trim().to_lowercase())
-                            })
-                    }),
-                    || {
+                    state.map(move |s| tree_filtered(s) && groups.with(Vec::is_empty) && matching_servers(s, None).next().is_none()),
+                    move || {
                         text()
                             .class("tree-no-results")
-                            .content(i18n::bind("未找到匹配的服务器或分组"))
+                            .content(i18n::bind(state.map(|s| {
+                                if s.connected_servers_only { "没有符合条件的已连接服务器" } else { "未找到匹配的服务器或分组" }.to_owned()
+                            })))
                     },
                 ),
                 when(
                     state.map(|s| {
-                        s.config.available_servers().next().is_none() && s.config.groups.is_empty()
+                        !tree_filtered(s) && s.config.available_servers().next().is_none() && s.config.groups.is_empty()
                     }),
                     || {
                         text()
@@ -508,7 +515,12 @@ pub(crate) fn sidebar(ui: Ui) -> impl Widget {
 
 fn server_rows(ui: Ui, group: Option<String>) -> impl Widget {
     let state = ui.state;
-    each(state.map(move |s| matching_servers(s, group.as_deref())))
+    let rows = state.map(move |s| {
+        matching_servers(s, group.as_deref())
+            .cloned()
+            .collect::<Vec<_>>()
+    });
+    each(rows)
         .key(|p| (p.id.clone(), p.name.clone(), p.host.clone(), p.port))
         .children({
             let ui = ui.clone();
@@ -558,22 +570,13 @@ fn server_rows(ui: Ui, group: Option<String>) -> impl Widget {
                                 text()
                                     .class("host-name")
                                     .content(value.map(|p| p.name.clone())),
-                                text().class("host-address").content(i18n::bind(state.map(
-                                    move |s| {
-                                        let p = value.get();
-                                        let status = match s.server_connection(&p.id) {
-                                            (true, _) => " · 已连接",
-                                            (_, true) => " · 连接中",
-                                            _ => "",
-                                        };
-                                        let status = i18n::translate(status);
-                                        #[cfg(windows)]
-                                        if let Some(distro) = p.direct_wsl() {
-                                            return format!("WSL · {distro}{status}");
-                                        }
-                                        format!("{}@{}:{}{status}", p.username, p.host, p.port)
-                                    },
-                                ))),
+                                text().class("host-address").content(value.map(|p| {
+                                    #[cfg(windows)]
+                                    if let Some(distro) = p.direct_wsl() {
+                                        return format!("WSL · {distro}");
+                                    }
+                                    format!("{}@{}:{}", p.username, p.host, p.port)
+                                })),
                                 when(value.map(|p| !p.environment.is_empty()), move || {
                                     text()
                                         .class("server-environment")
@@ -585,6 +588,22 @@ fn server_rows(ui: Ui, group: Option<String>) -> impl Widget {
                                 select.select_server(id, false);
                                 state.revise(|s| s.group = value.get().group_id);
                             }),
+                        text()
+                            .class(state.map(move |s| {
+                                match s.server_connection(&value.get().id) {
+                                    (false, true) => "tree-connection host-connection pending",
+                                    _ => "tree-connection host-connection",
+                                }
+                                .to_owned()
+                            }))
+                            .content(i18n::bind(state.map(move |s| {
+                                match s.server_connection(&value.get().id) {
+                                    (true, _) => "已连接",
+                                    (_, true) => "连接中",
+                                    _ => "",
+                                }
+                                .to_owned()
+                            }))),
                         icon_action(format!("{}的服务器操作", value.get().name), Icon::More)
                             .class("icon-button host-more")
                             .on_press(move || {
@@ -934,6 +953,7 @@ fn server_dialog(ui: Ui) -> impl Widget {
                                 s.collapsed_groups.remove(group);
                             }
                             s.search.clear();
+                            s.connected_servers_only = false;
                             if !labels_only {
                                 s.jobs.retain(|j| {
                                     j.server_id != profile.id
@@ -1000,6 +1020,7 @@ fn group_dialog(ui: Ui) -> impl Widget {
                         s.collapsed_groups.remove(&group_id);
                         s.group = Some(group_id);
                         s.search.clear();
+                        s.connected_servers_only = false;
                         s.dialog = None;
                         s.notice.clear();
                     }),

@@ -588,6 +588,11 @@ Ctrl+C 中断 · Ctrl+Shift+C 复制 · Ctrl+Shift+V 粘贴	Ctrl+C interrupt · 
 展开分组	Expand group
 折叠分组	Collapse group
 空分组	Empty group
+只看已连接	Connected only
+没有符合条件的已连接服务器	No matching connected servers
+已连接	Connected
+连接中	Connecting
+{count} 台已连接	{count} connected
 未找到匹配的服务器或分组	No matching servers or groups
 新建分组来整理服务器，或添加第一台服务器。	Create a group to organize your servers, or add your first server.
 {} 个分组 · {} 台服务器	{} groups · {} servers

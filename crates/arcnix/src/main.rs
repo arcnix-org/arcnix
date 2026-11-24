@@ -304,6 +304,7 @@ define_state! {
         group: Option<String> = None,
         collapsed_groups: HashSet<String> = HashSet::new(),
         search: String = String::new(),
+        connected_servers_only: bool = false,
         editor: ServerProfile = ServerProfile::default(),
         server_editor_original: Option<ServerProfile> = None,
         server_tags: String = String::new(),

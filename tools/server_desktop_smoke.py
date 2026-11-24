@@ -143,7 +143,7 @@ def main():
             first_epoch = terminal_epoch()
             server('Second server').click()
             expect(tabs.locator('.workbench-tab-select')).to_have_text(['Home'])
-            expect(server('Development').locator('.host-address')).to_contain_text('Connected')
+            expect(page.locator('.host-row').filter(has=server('Development')).locator('.host-connection')).to_have_text('Connected')
             page.locator('.overview-transfer').click()
             connect = page.get_by_role('dialog', name='Connect to server', exact=True)
             connect.get_by_role('textbox', name='Password or key passphrase', exact=True).fill('arcnix-test')
