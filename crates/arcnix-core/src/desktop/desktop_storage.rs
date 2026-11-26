@@ -458,55 +458,54 @@ pub(crate) fn single_file_update(
     }))
 }
 
-fn script(limit: usize, operation: &str) -> String {
+fn shell_command(limit: usize, operation: &str, action: &str) -> String {
     let paths = DOMAINS
         .iter()
         .map(|domain| domain.path())
         .collect::<Vec<_>>()
         .join(" ");
-    let mut script =
-        format!("# arcnix:desktop:domains:{operation}\nlimit={limit}\ndomains='{paths}'\n");
-    script.push_str(include_str!("desktop_storage.sh"));
-    script
+    let storage = include_str!("desktop_storage.sh");
+    let script = format!("limit={limit}\ndomains='{paths}'\n{storage}\n{action}");
+    // The storage script needs sh's EXIT trap lifetime. Keep stdin for the upload.
+    format!(
+        "# arcnix:desktop:domains:{operation}\nexec /bin/sh -c {}",
+        crate::remote_tasks::quote(&script)
+    )
 }
 
 pub(crate) fn file_command(limit: usize, base: &str, update: &FileUpdate) -> String {
-    let mut script = script(limit, "file");
     let digest = Sha256::digest(&update.contents);
     let FileUpdate {
         path,
         expected_snapshot,
         ..
     } = update;
-    script.push_str(&format!(
-        "\nprepare_file '{digest:x}'\npublish_file '{base}' '{expected_snapshot}' '{path}'\n"
-    ));
-    script
+    let action = format!(
+        "prepare_file '{digest:x}'\npublish_file '{base}' '{expected_snapshot}' '{path}'\n"
+    );
+    shell_command(limit, "file", &action)
 }
 
 pub(crate) fn command(limit: usize, commit: Option<(&str, &str, &[u8])>) -> Result<String> {
     use std::fmt::Write;
 
-    let operation = if commit.is_some() { "commit" } else { "read" };
-    let mut script = script(limit, operation);
-    if let Some((base, next, packet)) = commit {
-        writeln!(script, "\nprepare_commit '{next}'")?;
-        for record in records(packet)? {
-            ensure!(
-                !record.contents.is_empty(),
-                "Cannot publish an empty desktop file"
-            );
-            writeln!(
-                script,
-                "stage_file '{}' {} {}",
-                record.path,
-                record.contents_offset,
-                record.contents.len()
-            )?;
-        }
-        writeln!(script, "publish_commit '{base}' '{next}'")?;
-    } else {
-        script.push_str("\nread_desktop\n");
+    let Some((base, next, packet)) = commit else {
+        return Ok(shell_command(limit, "read", "read_desktop\n"));
+    };
+    let mut action = format!("prepare_commit '{next}'\n");
+    for record in records(packet)? {
+        ensure!(
+            !record.contents.is_empty(),
+            "Cannot publish an empty desktop file"
+        );
+        writeln!(
+            action,
+            "stage_file '{}' {} {}",
+            record.path,
+            record.contents_offset,
+            record.contents.len()
+        )?;
     }
-    Ok(script)
+    writeln!(action, "publish_commit '{base}' '{next}'")?;
+    Ok(shell_command(limit, "commit", &action))
 }

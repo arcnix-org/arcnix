@@ -275,6 +275,9 @@ def reply(server, channel, command):
         return send('')
     preferences = root / 'home' / server.username / '.arcnix' / 'desktop.json'
     if marker.startswith('# arcnix:desktop:domains:'):
+        runner = shlex.split(command.split('\n', 1)[1])
+        assert runner[:-1] == ['exec', '/bin/sh', '-c']
+        command = runner[-1]
         paths = re.search(r"^domains='([^']+)'$", command, re.M)[1].split()
         if (root / 'sync-offline').exists():
             return send(status=1, error='Fixture sync interrupted')

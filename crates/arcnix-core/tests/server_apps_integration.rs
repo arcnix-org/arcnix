@@ -1,7 +1,7 @@
-//! Native shell checks in an isolated WSL home, with a fake Docker executable.
-#[cfg(windows)]
+//! Native shell checks in an isolated Linux home, with a fake Docker executable.
+#[cfg(any(windows, target_os = "linux"))]
 #[test]
-#[ignore = "requires WSL Ubuntu and Python 3; uses no Docker daemon"]
+#[ignore = "requires Linux (or WSL Ubuntu) and Python 3; uses no Docker daemon"]
 fn remote_preferences_are_atomic_private_and_docker_uses_bounded_local_commands()
 -> anyhow::Result<()> {
     use std::io::Write;
@@ -16,10 +16,17 @@ fn remote_preferences_are_atomic_private_and_docker_uses_bounded_local_commands(
     use arcnix_core::server_apps::{DesktopApp, DesktopPreferences, DesktopWindow, FolderColor};
     use arcnix_core::sync::{Document, Snapshot, decode_desktop, desktop_commit_command};
 
+    #[cfg(windows)]
     let distro = std::env::var("ARCNIX_TEST_SHELL_DISTRIBUTION")?;
     let raw = |script: &str| -> Result<Output> {
-        let mut child = Command::new("wsl.exe")
-            .args(["-d", &distro, "--exec", "/bin/sh", "-s"])
+        #[cfg(windows)]
+        let mut shell = Command::new("wsl.exe");
+        #[cfg(windows)]
+        shell.args(["-d", &distro, "--exec", "/bin/sh"]);
+        #[cfg(target_os = "linux")]
+        let mut shell = Command::new("/bin/sh");
+        let mut child = shell
+            .arg("-s")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -46,13 +53,21 @@ fn remote_preferences_are_atomic_private_and_docker_uses_bounded_local_commands(
         "Invalid test root"
     );
     let home = format!("{root}/login home 中文");
+    let desktop_shell =
+        std::env::var("ARCNIX_TEST_DESKTOP_LOGIN_SHELL").unwrap_or_else(|_| "/bin/sh".into());
     let invoke = |command: &str| -> String {
+        let shell = if command.starts_with("# arcnix:desktop:domains:") {
+            &desktop_shell
+        } else {
+            "/bin/sh"
+        };
         format!(
-            "env HOME={} XDG_RUNTIME_DIR={} PATH={} DOCKER_HOST=tcp://wrong.invalid:2375 DOCKER_CONTEXT=wrong ARCNIX_NATIVE_FIXTURE={} /bin/sh -c {}",
+            "env HOME={} XDG_RUNTIME_DIR={} PATH={} DOCKER_HOST=tcp://wrong.invalid:2375 DOCKER_CONTEXT=wrong ARCNIX_NATIVE_FIXTURE={} {} -c {}",
             q(&home),
             q(&format!("{root}/runtime")),
             q(&format!("{root}/bin:/usr/bin:/bin")),
             q(&root),
+            q(shell),
             q(command)
         )
     };
@@ -256,6 +271,14 @@ fn remote_preferences_are_atomic_private_and_docker_uses_bounded_local_commands(
                 && file_identity(&unrelated)? == unchanged_browser
                 && decode_desktop(&saved)? == files_changed,
             "Single-file saves changed the generation, touched the browser, or lost an edit"
+        );
+        let leftovers = run(&format!(
+            "find {} -name '.stage.*' -o -name '.file.*' -o -name '.desktop.next.*'",
+            q(&format!("{home}/.arcnix"))
+        ))?;
+        ensure!(
+            leftovers.is_empty(),
+            "Staging files left behind: {leftovers}"
         );
 
         let state = format!("{home}/.arcnix");

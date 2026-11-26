@@ -51,9 +51,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
-            build-essential pkg-config perl libssl-dev libgtk-3-dev libwebkit2gtk-4.1-dev
+            build-essential pkg-config perl libssl-dev libgtk-3-dev libwebkit2gtk-4.1-dev zsh
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
+      - name: Test desktop sync through a zsh login shell
+        run: cargo test --locked -p arcnix-core --test server_apps_integration -- --ignored
+        env:
+          ARCNIX_TEST_DESKTOP_LOGIN_SHELL: /usr/bin/zsh
       - run: cargo doc -p arcnix-core --no-deps --locked
         env:
           RUSTDOCFLAGS: -D warnings
