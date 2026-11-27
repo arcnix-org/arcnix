@@ -12,6 +12,7 @@ pub mod nginx_config;
 pub mod nginx_site;
 pub mod packages;
 pub mod pgadmin;
+pub mod redis;
 pub mod server_inventory;
 pub mod software_capabilities;
 pub mod software_catalog;

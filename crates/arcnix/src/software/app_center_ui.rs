@@ -215,6 +215,7 @@ fn window(s: &State, app: App) -> Option<WorkspacePage> {
         "pgadmin" => WorkspacePage::PgAdmin,
         "docker" => WorkspacePage::Docker,
         "nginx" => WorkspacePage::Nginx,
+        "redis" => WorkspacePage::Redis,
         _ => return None,
     };
     (s.connected && server_desktop::available_apps(s).contains(&page)).then_some(page)
@@ -558,6 +559,9 @@ fn discover(ui: Ui) -> impl Widget {
 fn nginx_window(s: &State) -> bool {
     s.connected && server_desktop::available_apps(s).contains(&WorkspacePage::Nginx)
 }
+fn redis_window(s: &State) -> bool {
+    s.connected && server_desktop::available_apps(s).contains(&WorkspacePage::Redis)
+}
 fn pgadmin_available(s: &State) -> bool {
     server_desktop::available_apps(s).contains(&WorkspacePage::PgAdmin)
 }
@@ -599,6 +603,35 @@ fn item_actions(ui: Ui, value: Cage<Item>) -> impl Widget {
                                         service.open_desktop_app(WorkspacePage::Nginx);
                                     } else {
                                         service.open_system_service("nginx.service");
+                                    }
+                                })
+                        }
+                    },
+                ),
+                when(
+                    value.map(|i| {
+                        matches!(i, Item::Package(Source::Native(_), _))
+                            && i.app().is_some_and(|app| app.id == "redis")
+                    }),
+                    {
+                        let service = service.clone();
+                        move || {
+                            let service = service.clone();
+                            sapid::button()
+                                .class("button app-center-open")
+                                .label(i18n::bind(state.map(|s| {
+                                    if redis_window(s) {
+                                        "Open Redis"
+                                    } else {
+                                        "Manage service"
+                                    }
+                                    .to_owned()
+                                })))
+                                .on_press(move || {
+                                    if service.state.with(redis_window) {
+                                        service.open_desktop_app(WorkspacePage::Redis);
+                                    } else {
+                                        service.open_system_service("redis-server.service");
                                     }
                                 })
                         }

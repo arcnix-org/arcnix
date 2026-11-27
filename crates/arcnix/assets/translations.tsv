@@ -3544,3 +3544,109 @@ Docker Hub 不向未登录的用户显示 {repository}；它可能是私有镜�
 Docker 没有报告任何网络。	Docker reported no networks.
 共回收空间：{size}	Total reclaimed space: {size}
 共计：{size}	Total: {size}
+打开 Redis	Open Redis
+键值	Keys
+连接与慢查询	Clients & slowlog
+需要认证	Authentication required
+无法连接	Unreachable
+永不过期	No expiry
+Redis 认证	Redis authentication
+此 Redis 实例需要密码。凭据仅保留在本次会话的内存中，不会保存或出现在命令行参数中。	This Redis instance requires a password. Credentials stay only in memory for this session and are never saved or placed on command lines.
+ACL 用户名（可选）	ACL username (optional)
+解锁	Unlock
+锁定	Lock
+刷新 Redis	Refresh Redis
+总键数	Total keys
+已连接客户端	Connected clients
+每秒操作	Ops / sec
+持久化	Persistence
+模式与角色	Mode & role
+键空间	Keyspace
+所有数据库均无键。	No keys in any database.
+键模式	Key pattern
+扫描	Scan
+新建键…	New key…
+请先启动或连接 Redis 以浏览键值。	Start or connect to Redis to browse keys.
+正在扫描键…	Scanning keys…
+当前数据库没有匹配的键。	No matching keys in this database.
+当前批次暂无匹配项，点击加载更多继续扫描。	No matches in this batch yet. Load more to keep scanning.
+二进制键名（只读）	Binary key name (read-only)
+加载更多键	Load more keys
+选择一个键以查看或编辑其值。	Select a key to inspect or edit its value.
+正在加载键…	Loading key…
+刷新键	Refresh key
+删除键…	Delete key…
+TTL（秒）	TTL (seconds)
+设置 TTL	Set TTL
+设为永不过期	Persist
+二进制值以十六进制预览显示，已禁用编辑。	Binary value shown as hex preview. Editing is disabled.
+较大的值已截断预览，已禁用编辑。	Large value is truncated for preview. Editing is disabled.
+格式化 JSON	Format JSON
+保存值	Save value
+字段	Field
+分值	Score
+移除条目	Remove entry
+刷新诊断信息	Refresh diagnostics
+筛选客户端	Filter clients
+仅显示前 200 个已连接客户端。	Showing the first 200 connected clients.
+慢查询日志	Slowlog
+暂无慢查询记录。	No slow queries recorded.
+新建键	New key
+字符串	String
+哈希	Hash
+列表	List
+集合	Set
+有序集合	Sorted set
+键名	Key name
+TTL（秒，可选）	TTL in seconds (optional)
+删除键	Delete key
+键已删除	Key deleted
+已保存	Saved
+启动 Redis	Start Redis
+停止 Redis	Stop Redis
+重启 Redis	Restart Redis
+启动 Redis 容器	Start Redis container
+停止 Redis 容器	Stop Redis container
+重启 Redis 容器	Restart Redis container
+无法检查 Docker 容器：{error}	Docker containers could not be checked: {error}
+读取 Redis 需要在服务器上安装 Python 3	Reading Redis needs Python 3 on the server
+AOF 已开启	AOF on
+AOF 未开启	AOF off
+{count}（{blocked} 阻塞）	{count} ({blocked} blocked)
+{ops} · 命中率 {rate}%	{ops} · {rate}% hit
+{keys} 个键 · {expires} 个过期	{keys} keys · {expires} expiring
+{keys} 个键 · {expires} 个过期 · 平均 TTL {ttl}	{keys} keys · {expires} expiring · avg TTL {ttl}
+{len} 字节	{len} bytes
+{len} 项	{len} items
+确定从 db{db} 删除键 {key} 吗？此操作无法撤销。	Delete key {key} from db{db}? This cannot be undone.
+打开 db{db}	Open db{db}
+请输入键名	Enter a key name
+键名无效或过长	Key name is invalid or too long
+值超过 256 KiB 编辑上限	Value exceeds the 256 KiB editing limit
+TTL 必须大于 0 秒	TTL must be greater than 0 seconds
+请输入整数秒的 TTL	Enter TTL in whole seconds
+请输入有效的数字分值	Enter a valid numeric score
+请输入成员值	Enter a member value
+Redis 用户名无效	Invalid Redis username
+Redis 密码无效	Invalid Redis password
+字段不能为空	Field cannot be empty
+字段无效或过长	Field is invalid or too long
+请先选择一个键	Select a key first
+此类型不支持添加条目	Adding entries is not supported for this type
+此 Redis 实例没有可控制的服务	This Redis instance has no controllable service
+启动 Redis 系统服务。	Starts the Redis system service.
+停止 Redis 系统服务。在重新启动之前，使用此实例的应用将无法访问。	Stops the Redis system service. Applications using this instance will lose access until it is started again.
+重启 Redis 系统服务。现有连接将被断开。	Restarts the Redis system service. Open connections are dropped.
+启动 Redis Docker 容器。	Starts the Redis Docker container.
+停止 Redis Docker 容器。连接到此容器的客户端将被断开。	Stops the Redis Docker container. Clients connected to this container will disconnect.
+重启 Redis Docker 容器。现有连接将被断开。	Restarts the Redis Docker container. Open connections are dropped.
+无效的 Redis 响应	Invalid Redis response
+无效的 Redis 键列表响应	Invalid Redis key list response
+无效的 Redis 键值响应	Invalid Redis key value response
+无效的 Redis 诊断响应	Invalid Redis diagnostics response
+同名键已存在	A key with this name already exists
+创建期间键已变更，请重试	The key changed during creation. Try again
+未找到此容器的 Redis 连接地址	No Redis endpoint found for this container
+Redis 未配置明文端口或 Unix 套接字	Redis has no configured plaintext port or Unix socket
+此键已不存在或不再是字符串	This key no longer holds a string
+编辑期间键已变更，请重新加载后重试	The key changed during editing. Reload it and try again

@@ -729,7 +729,7 @@ class Authentication(paramiko.ServerInterface):
                 from server_apps_fixture import windows_inventory_reply
                 windows_inventory_reply(self, channel, text)
                 return
-            if text.startswith(('# arcnix:browser:repair ', '# arcnix:sync:', '# arcnix:apps:', '# arcnix:desktop:', '# arcnix:docker:', '# arcnix:disks:', '# arcnix:compose:', '# arcnix:software:', '# arcnix:network:', '# arcnix:processes:')):
+            if text.startswith(('# arcnix:browser:repair ', '# arcnix:sync:', '# arcnix:apps:', '# arcnix:desktop:', '# arcnix:docker:', '# arcnix:disks:', '# arcnix:compose:', '# arcnix:software:', '# arcnix:network:', '# arcnix:processes:', '# arcnix:redis:')):
                 from server_apps_fixture import reply as application_reply
                 if application_reply(self, channel, text):
                     return

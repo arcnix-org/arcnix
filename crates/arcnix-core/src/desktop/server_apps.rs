@@ -37,6 +37,7 @@ pub struct Applications {
     pub snap: bool,
     pub tmux: bool,
     pub nginx: bool,
+    pub redis: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -245,10 +246,11 @@ pub enum DesktopApp {
     Settings,
     PgAdmin,
     Nginx,
+    Redis,
 }
 
 impl DesktopApp {
-    pub const COUNT: usize = 18;
+    pub const COUNT: usize = 20;
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -608,7 +610,7 @@ pub(crate) fn parse_clock(output: &str) -> Result<ClockSample> {
 }
 
 pub fn discover_command() -> &'static str {
-    "# arcnix:apps:discover\nprintf 'ARCNIX_APPS_V1\\n'; if ! command -v docker >/dev/null 2>&1 && test -x /snap/bin/docker; then export PATH=\"$PATH:/snap/bin\"; fi; if command -v docker >/dev/null 2>&1; then printf 'docker\\n'; if command -v timeout >/dev/null 2>&1 && timeout -k 1s 5s docker compose version --short >/dev/null 2>&1; then printf 'compose\\n'; fi; fi; if command -v snap >/dev/null 2>&1; then printf 'snap\\n'; fi; if command -v tmux >/dev/null 2>&1; then printf 'tmux\\n'; fi; arcnix_nginx=; if command -v nginx >/dev/null 2>&1 || test -x /usr/sbin/nginx; then arcnix_nginx=1; elif command -v docker >/dev/null 2>&1 && command -v timeout >/dev/null 2>&1 && timeout -k 1s 5s docker ps -a --no-trunc --format '{{.Image}} {{.Command}}' 2>/dev/null | grep -qi nginx; then arcnix_nginx=1; fi; if [ -n \"$arcnix_nginx\" ]; then printf 'nginx\\n'; fi"
+    "# arcnix:apps:discover\nprintf 'ARCNIX_APPS_V1\\n'; if ! command -v docker >/dev/null 2>&1 && test -x /snap/bin/docker; then export PATH=\"$PATH:/snap/bin\"; fi; if command -v docker >/dev/null 2>&1; then printf 'docker\\n'; if command -v timeout >/dev/null 2>&1 && timeout -k 1s 5s docker compose version --short >/dev/null 2>&1; then printf 'compose\\n'; fi; fi; if command -v snap >/dev/null 2>&1; then printf 'snap\\n'; fi; if command -v tmux >/dev/null 2>&1; then printf 'tmux\\n'; fi; arcnix_nginx=; if command -v nginx >/dev/null 2>&1 || test -x /usr/sbin/nginx; then arcnix_nginx=1; elif command -v docker >/dev/null 2>&1 && command -v timeout >/dev/null 2>&1 && timeout -k 1s 5s docker ps -a --no-trunc --format '{{.Image}} {{.Command}}' 2>/dev/null | grep -qi nginx; then arcnix_nginx=1; fi; if [ -n \"$arcnix_nginx\" ]; then printf 'nginx\\n'; fi; arcnix_redis=; if command -v redis-server >/dev/null 2>&1 || test -x /usr/bin/redis-server || test -x /usr/sbin/redis-server || command -v valkey-server >/dev/null 2>&1 || test -x /usr/bin/valkey-server || test -x /usr/sbin/valkey-server; then arcnix_redis=1; elif command -v docker >/dev/null 2>&1 && command -v timeout >/dev/null 2>&1 && unset DOCKER_HOST DOCKER_CONTEXT DOCKER_TLS_VERIFY DOCKER_CERT_PATH && timeout -k 1s 5s docker ps -a --no-trunc --format '{{.Image}} {{.Command}}' 2>/dev/null | grep -viE '(exporter|commander|insight|redis-cli)' | grep -qiE '(^|[/:_\" -])(redis|valkey)([:_\" -]|$)'; then arcnix_redis=1; fi; if [ -n \"$arcnix_redis\" ]; then printf 'redis\\n'; fi"
 }
 pub fn discover(session: &RemoteSession) -> Result<Applications> {
     use crate::host::HostOs;
@@ -649,6 +651,7 @@ pub fn discover(session: &RemoteSession) -> Result<Applications> {
             "snap" => &mut apps.snap,
             "tmux" => &mut apps.tmux,
             "nginx" => &mut apps.nginx,
+            "redis" => &mut apps.redis,
             _ => anyhow::bail!("Invalid application detection response"),
         };
         ensure!(!*target, "Duplicate application detection response");
@@ -667,6 +670,58 @@ pub fn parse_preferences(text: &str) -> Result<DesktopPreferences> {
 mod tests {
     use super::*;
     use crate::desktop_customization::DockItem;
+
+    #[test]
+    fn desktop_app_count_matches_all_variants() {
+        let all = [
+            DesktopApp::Terminal,
+            DesktopApp::Monitor,
+            DesktopApp::AppCenter,
+            DesktopApp::Services,
+            DesktopApp::Logs,
+            DesktopApp::Files,
+            DesktopApp::Disks,
+            DesktopApp::Docker,
+            DesktopApp::Editor,
+            DesktopApp::Code,
+            DesktopApp::Player,
+            DesktopApp::ImageViewer,
+            DesktopApp::PdfReader,
+            DesktopApp::Office,
+            DesktopApp::Trash,
+            DesktopApp::Browser,
+            DesktopApp::Settings,
+            DesktopApp::PgAdmin,
+            DesktopApp::Nginx,
+            DesktopApp::Redis,
+        ];
+        // Exhaustive check so adding a DesktopApp variant without updating COUNT fails to compile.
+        for app in all {
+            match app {
+                DesktopApp::Terminal
+                | DesktopApp::Monitor
+                | DesktopApp::AppCenter
+                | DesktopApp::Services
+                | DesktopApp::Logs
+                | DesktopApp::Files
+                | DesktopApp::Disks
+                | DesktopApp::Docker
+                | DesktopApp::Editor
+                | DesktopApp::Code
+                | DesktopApp::Player
+                | DesktopApp::ImageViewer
+                | DesktopApp::PdfReader
+                | DesktopApp::Office
+                | DesktopApp::Trash
+                | DesktopApp::Browser
+                | DesktopApp::Settings
+                | DesktopApp::PgAdmin
+                | DesktopApp::Nginx
+                | DesktopApp::Redis => {}
+            }
+        }
+        assert_eq!(DesktopApp::COUNT, all.len());
+    }
 
     #[test]
     fn settings_naming_newer_apps_still_load() -> Result<()> {

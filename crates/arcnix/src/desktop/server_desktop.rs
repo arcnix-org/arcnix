@@ -83,6 +83,7 @@ pub(crate) fn app_id(page: WorkspacePage) -> Option<DesktopApp> {
         WorkspacePage::Settings => DesktopApp::Settings,
         WorkspacePage::PgAdmin => DesktopApp::PgAdmin,
         WorkspacePage::Nginx => DesktopApp::Nginx,
+        WorkspacePage::Redis => DesktopApp::Redis,
         _ => return None,
     })
 }
@@ -106,6 +107,7 @@ pub(crate) fn app_page(app: DesktopApp) -> WorkspacePage {
         DesktopApp::Settings => WorkspacePage::Settings,
         DesktopApp::PgAdmin => WorkspacePage::PgAdmin,
         DesktopApp::Nginx => WorkspacePage::Nginx,
+        DesktopApp::Redis => WorkspacePage::Redis,
     }
 }
 
@@ -222,7 +224,7 @@ fn focus_window(ui: &Ui, input: &str) {
     }
 }
 
-pub(crate) const APP_LAUNCHERS: [WorkspacePage; 15] = [
+pub(crate) const APP_LAUNCHERS: [WorkspacePage; 16] = [
     WorkspacePage::Files(0),
     WorkspacePage::Terminal,
     WorkspacePage::Editor,
@@ -234,6 +236,7 @@ pub(crate) const APP_LAUNCHERS: [WorkspacePage; 15] = [
     WorkspacePage::Office,
     WorkspacePage::Docker,
     WorkspacePage::Nginx,
+    WorkspacePage::Redis,
     WorkspacePage::AppCenter,
     WorkspacePage::Monitor,
     WorkspacePage::Settings,
@@ -273,6 +276,7 @@ pub(crate) fn available_apps(s: &State) -> Vec<WorkspacePage> {
             WorkspacePage::Browser => cfg!(any(windows, target_os = "linux")),
             WorkspacePage::Docker => s.server_apps.applications.docker,
             WorkspacePage::Nginx => s.server_apps.applications.nginx,
+            WorkspacePage::Redis => s.server_apps.applications.redis,
             _ => true,
         })
         .collect()
@@ -281,6 +285,7 @@ pub(crate) fn app_label(page: WorkspacePage) -> &'static str {
     match page.base() {
         WorkspacePage::Docker => "Docker",
         WorkspacePage::Nginx => "Nginx",
+        WorkspacePage::Redis => "Redis",
         WorkspacePage::PgAdmin => "pgAdmin",
         WorkspacePage::Files(_) => "文件管理",
         WorkspacePage::Code => "Code Editor",
@@ -347,6 +352,7 @@ pub(crate) fn app_class(page: WorkspacePage) -> &'static str {
     match page.base() {
         WorkspacePage::Docker => "app-docker",
         WorkspacePage::Nginx => "app-nginx",
+        WorkspacePage::Redis => "app-redis",
         WorkspacePage::PgAdmin => "app-pgadmin",
         WorkspacePage::Files(_) => "app-files",
         WorkspacePage::Code => "app-code",
@@ -393,6 +399,7 @@ pub(crate) fn app_icon(page: WorkspacePage) -> Icon {
         WorkspacePage::Docker => Icon::Docker,
         WorkspacePage::PgAdmin => Icon::Database,
         WorkspacePage::Nginx => Icon::WebServer,
+        WorkspacePage::Redis => Icon::Redis,
         _ => Icon::Grid,
     }
 }
@@ -467,6 +474,8 @@ pub(crate) fn owns_dialog(s: &State) -> bool {
                     | Dialog::DockerRemoveImage
                     | Dialog::DockerLogins
                     | Dialog::NginxNewSite
+                    | Dialog::RedisNewKey
+                    | Dialog::RedisDeleteKey
                     | Dialog::TerminalRename { .. }
                     | Dialog::TerminatePortProcess
                     | Dialog::CustomizeFolder { .. }
@@ -627,6 +636,7 @@ impl Ui {
         }
         self.docker_enter();
         self.nginx_enter();
+        self.redis_enter();
         self.pgadmin_enter();
         self.terminal_enter();
         self.observability_enter();
@@ -1170,6 +1180,7 @@ fn app_window(ui: Ui, page: WorkspacePage) -> impl Widget {
         WorkspacePage::Docker => fragment(docker_ui::page(ui)),
         WorkspacePage::PgAdmin => fragment(pgadmin_ui::page(ui)),
         WorkspacePage::Nginx => fragment(nginx_ui::page(ui)),
+        WorkspacePage::Redis => fragment(redis_ui::page(ui)),
         WorkspacePage::Code => fragment(code_workbench::page(ui)),
         WorkspacePage::Editor => fragment(text_editor::page(ui, id)),
         WorkspacePage::Player => fragment(video_player::panel(ui)),

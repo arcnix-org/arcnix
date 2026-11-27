@@ -14,6 +14,15 @@ def apply_task(server,record):
     script=record.get('application_script','')
     if not script:return
     root=server.fixture_root
+    if '# arcnix:redis:' in script and (root / 'redis-enabled').exists():
+        from redis_fixture import cluster_for
+        cluster = cluster_for(root)
+        target = 'docker' if 'docker ' in script else 'host'
+        if '# arcnix:redis:stop' in script:
+            cluster.set_running(target, False)
+        elif '# arcnix:redis:start' in script or '# arcnix:redis:restart' in script:
+            cluster.set_running(target, True)
+        return
     decoded=[]
     for value in re.findall(r'[A-Za-z0-9+/]{40,}={0,2}',script):
         try:decoded.append(base64.b64decode(value).decode())
@@ -167,7 +176,7 @@ def publish_desktop(legacy, paths, data):
 
 def reply(server, channel, command):
     marker = command.splitlines()[0]
-    if not marker.startswith(('# arcnix:browser:repair ', '# arcnix:sync:', '# arcnix:apps:', '# arcnix:desktop:', '# arcnix:docker:', '# arcnix:disks:', '# arcnix:compose:', '# arcnix:software:', '# arcnix:network:', '# arcnix:processes:')):
+    if not marker.startswith(('# arcnix:browser:repair ', '# arcnix:sync:', '# arcnix:apps:', '# arcnix:desktop:', '# arcnix:docker:', '# arcnix:disks:', '# arcnix:compose:', '# arcnix:software:', '# arcnix:network:', '# arcnix:processes:', '# arcnix:redis:')):
         return False
     root = server.fixture_root
     with (root / 'server-app-queries.jsonl').open('a', encoding='utf-8') as log:
@@ -235,8 +244,18 @@ def reply(server, channel, command):
             'OK\n# Resolver configuration\nnameserver 192.0.2.53\n'
             'nameserver fe80::53%eth0\n\nARCNIX_NETWORK_END\n'
         )
+    if marker == '# arcnix:redis:helper':
+        data = bytearray()
+        while True:
+            chunk = channel.recv(65536)
+            if not chunk:
+                break
+            data.extend(chunk)
+        from redis_fixture import handle_helper_request
+        status, out, err = handle_helper_request(root, bytes(data))
+        return send(out, status=status, error=err)
     if marker == '# arcnix:apps:discover':
-        return send('ARCNIX_APPS_V1\n' + ('docker\ncompose\n' if seed.exists() and not (root/'docker-cli-removed').exists() else '') + ('snap\n' if (root/'software-snap-enabled').exists() else '') + ('tmux\n' if (root/'tmux-enabled').exists() else ''))
+        return send('ARCNIX_APPS_V1\n' + ('docker\ncompose\n' if seed.exists() and not (root/'docker-cli-removed').exists() else '') + ('snap\n' if (root/'software-snap-enabled').exists() else '') + ('tmux\n' if (root/'tmux-enabled').exists() else '') + ('redis\n' if (root/'redis-enabled').exists() else ''))
     locale = root / 'system-locale'
     if marker == '# arcnix:desktop:locale':
         if not locale.exists():

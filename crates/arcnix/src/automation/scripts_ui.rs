@@ -405,6 +405,7 @@ pub(crate) fn event(ui: &Ui, event: batch_worker::Event) {
                     .find(|task| &task.id == id)
                     .is_some_and(|task| {
                         (task.script_id.starts_with("builtin:nginx:")
+                            || task.script_id.starts_with("builtin:redis:")
                             || task.script_id == arcnix_core::configurations::SCRIPT_ID
                             || task.script_id == "builtin:service-operation")
                             && task
@@ -517,6 +518,7 @@ pub(crate) fn event(ui: &Ui, event: batch_worker::Event) {
     }
     if let Some(id) = refresh_nginx {
         ui.nginx_task_finished(&id);
+        ui.redis_task_finished(&id);
         ui.docker_task_finished(&id);
     }
     if let Some(id) = finished {

@@ -796,6 +796,7 @@ input,textarea,select{font:inherit}input{height:36px}textarea{line-height:1.6}
 .pgadmin-download { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .app-pgadmin { --tile-tint: #4580b4; --tile-shade: #274f78; }
 .app-nginx { --tile-tint: #2b9a5a; --tile-shade: #1d6b3f; }
+.app-redis { --tile-tint: #d93829; --tile-shade: #9e2118; }
 .desktop-app-label { font-size: 13px; line-height: 1.35; font-weight: 500; white-space: normal; text-align: center; }
 .desktop-dock-zone {
   --dock-edge-gap: 4px;
@@ -3378,6 +3379,69 @@ button,
 }
 .menu-key-hint { margin-inline-start: auto; color: var(--muted); font-size: var(--font-small); white-space: nowrap; }
 .menu-key-hint:empty { display: none; }
+
+/* Redis app. */
+.redis-overview-body, .redis-keys-view, .redis-diag-view, .redis-diag-sections { display: flex !important; flex-direction: column; gap: 14px; min-width: 0; min-height: 0; flex: 1; }
+.redis-auth-card { display: flex !important; flex-direction: column; gap: 10px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+.redis-auth-fields { display: flex !important; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.redis-auth-fields > .field { flex: 1 1 180px; min-width: 0; }
+.redis-auth-submit { flex: none; margin-bottom: 1px; }
+.redis-keys-toolbar { display: flex !important; align-items: center; gap: 8px; flex-wrap: wrap; }
+.redis-db-strip { display: flex !important; gap: 2px; padding: 3px; border-radius: 8px; background: var(--raised); flex-wrap: wrap; }
+.redis-pattern-input { flex: 1 1 180px; min-width: 140px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.redis-keys-split { display: flex !important; flex: 1; min-height: 280px; gap: 12px; min-width: 0; overflow: hidden; }
+.redis-keys-list-pane { display: flex !important; flex-direction: column; flex: 0 0 280px; min-width: 210px; min-height: 0; gap: 8px; overflow: auto; padding-right: 4px; }
+.redis-keys-list { display: flex !important; flex-direction: column; gap: 4px; }
+.redis-key-row { display: flex !important; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); min-width: 0; }
+.redis-key-row.selected { border-color: var(--accent); background: var(--accent-bg); }
+.redis-key-open { display: flex !important; flex-direction: column; align-items: flex-start !important; gap: 2px; flex: 1; min-width: 0; padding: 0 !important; border: 0 !important; background: transparent !important; text-align: left !important; }
+.redis-key-name { width: 100%; font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.redis-key-meta { font-size: 11.5px; }
+.redis-type-badge { flex: none; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.redis-type-badge.type-string { color: #56b6c2; border-color: color-mix(in srgb, #56b6c2 45%, transparent); }
+.redis-type-badge.type-hash { color: #c678dd; border-color: color-mix(in srgb, #c678dd 45%, transparent); }
+.redis-type-badge.type-list { color: #e5c07b; border-color: color-mix(in srgb, #e5c07b 45%, transparent); }
+.redis-type-badge.type-set { color: #98c379; border-color: color-mix(in srgb, #98c379 45%, transparent); }
+.redis-type-badge.type-zset { color: #61afef; border-color: color-mix(in srgb, #61afef 45%, transparent); }
+.redis-type-badge.type-stream { color: #e06c75; border-color: color-mix(in srgb, #e06c75 45%, transparent); }
+.theme-light .redis-type-badge.type-string:not(:where(.desktop-dark *)),
+.desktop-light .redis-type-badge.type-string { color: #0e6f7c; border-color: color-mix(in srgb, #0e6f7c 40%, transparent); }
+.theme-light .redis-type-badge.type-hash:not(:where(.desktop-dark *)),
+.desktop-light .redis-type-badge.type-hash { color: #7c3599; border-color: color-mix(in srgb, #7c3599 40%, transparent); }
+.theme-light .redis-type-badge.type-list:not(:where(.desktop-dark *)),
+.desktop-light .redis-type-badge.type-list { color: #8c5a00; border-color: color-mix(in srgb, #8c5a00 40%, transparent); }
+.theme-light .redis-type-badge.type-set:not(:where(.desktop-dark *)),
+.desktop-light .redis-type-badge.type-set { color: #2b6e22; border-color: color-mix(in srgb, #2b6e22 40%, transparent); }
+.theme-light .redis-type-badge.type-zset:not(:where(.desktop-dark *)),
+.desktop-light .redis-type-badge.type-zset { color: #195fa8; border-color: color-mix(in srgb, #195fa8 40%, transparent); }
+.theme-light .redis-type-badge.type-stream:not(:where(.desktop-dark *)),
+.desktop-light .redis-type-badge.type-stream { color: #a82430; border-color: color-mix(in srgb, #a82430 40%, transparent); }
+.redis-load-more { align-self: center; }
+.redis-key-detail { display: flex !important; flex-direction: column; flex: 1; min-width: 0; min-height: 0; overflow: auto; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); gap: 12px; }
+.redis-detail-inner { display: flex !important; flex-direction: column; gap: 12px; min-width: 0; flex: 1; }
+.redis-detail-head { display: flex !important; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+.redis-detail-title { flex: 1; min-width: 0; gap: 3px; }
+.redis-detail-name { font: 600 15px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+.redis-detail-meta { font-size: 12px; }
+.redis-ttl-bar { display: flex !important; align-items: center; gap: 8px; flex-wrap: wrap; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.redis-ttl-input { width: 120px; }
+.redis-string-editor, .redis-collection { display: flex !important; flex-direction: column; gap: 10px; flex: 1; min-width: 0; }
+.redis-string-tools { display: flex !important; justify-content: flex-end; gap: 8px; }
+.redis-value-area { flex: 1; min-height: 220px; font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace !important; white-space: pre; }
+.redis-new-value { min-height: 110px; font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace !important; }
+.redis-add-row { display: flex !important; align-items: center; gap: 8px; flex-wrap: wrap; }
+.redis-add-key { flex: 0 1 160px; min-width: 110px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.redis-add-score { width: 96px; }
+.redis-add-val { flex: 1 1 180px; min-width: 120px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.redis-entries { display: flex !important; flex-direction: column; gap: 6px; min-width: 0; }
+.redis-entry-row { display: flex !important; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); min-width: 0; }
+.redis-entry-label { flex: 0 0 160px; min-width: 0; font: 600 12.5px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+.redis-entry-value { flex: 1; min-width: 0; font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; white-space: pre-wrap; }
+.redis-client-filter { flex: 1 1 200px; max-width: 300px; margin-left: auto; }
+@container nginx (max-width: 660px) {
+  .redis-keys-split { flex-direction: column; overflow: auto; }
+  .redis-keys-list-pane { flex: none; max-height: 240px; }
+}
 
 .rail-activity { position: relative; }
 .sync-count { position: absolute; right: 0; top: 0; border-radius: 1em; min-width: 1.5em; padding: 0 3px; background: var(--accent); color: var(--bg); font-size: 10px; line-height: 1.5; }

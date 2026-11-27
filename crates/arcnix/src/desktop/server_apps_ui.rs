@@ -466,6 +466,7 @@ pub(crate) fn event(ui: &Ui, serial: u64, result: std::result::Result<Reply, Str
             && let Some(result) = network_ui::event(ui, serial, result)
             && let Some(result) = processes_ui::event(ui, serial, result)
             && let Some(result) = nginx_ui::event(ui, serial, result)
+            && let Some(result) = redis_ui::event(ui, serial, result)
         {
             docker_ui::event(ui, serial, result);
         }
@@ -490,6 +491,10 @@ pub(crate) fn event(ui: &Ui, serial: u64, result: std::result::Result<Reply, Str
                     if !s.server_apps.applications.nginx {
                         server_desktop::remove_window(s, WorkspacePage::Nginx);
                         s.nginx = Default::default();
+                    }
+                    if !s.server_apps.applications.redis {
+                        server_desktop::remove_window(s, WorkspacePage::Redis);
+                        s.redis = Default::default();
                     }
                 }
                 Err(error) => s.server_apps.discover_error = error,
@@ -570,6 +575,7 @@ pub(crate) fn event(ui: &Ui, serial: u64, result: std::result::Result<Reply, Str
     if kind == 0 {
         ui.docker_enter();
         ui.nginx_enter();
+        ui.redis_enter();
     }
     if kind <= 1 {
         ui.terminal_enter();

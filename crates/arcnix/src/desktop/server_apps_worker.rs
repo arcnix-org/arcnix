@@ -71,6 +71,31 @@ pub enum Action {
     NginxLogs(String),
     /// A command from `nginx::certificates_command`.
     NginxCertificates(String),
+    RedisRead(std::collections::BTreeMap<String, arcnix_core::redis::Auth>),
+    RedisScan {
+        endpoint: arcnix_core::redis::Endpoint,
+        auth: Option<arcnix_core::redis::Auth>,
+        db: u8,
+        cursor: String,
+        pattern: String,
+    },
+    RedisReadKey {
+        endpoint: arcnix_core::redis::Endpoint,
+        auth: Option<arcnix_core::redis::Auth>,
+        db: u8,
+        key: String,
+    },
+    RedisDiagnostics {
+        endpoint: arcnix_core::redis::Endpoint,
+        auth: Option<arcnix_core::redis::Auth>,
+    },
+    RedisWrite {
+        mode: arcnix_core::redis::WriteMode,
+        endpoint: arcnix_core::redis::Endpoint,
+        auth: Option<arcnix_core::redis::Auth>,
+        db: u8,
+        op: arcnix_core::redis::WriteOp,
+    },
 }
 pub enum Reply {
     Applications(server_apps::Applications),
@@ -116,6 +141,11 @@ pub enum Reply {
     Nginx(arcnix_core::nginx::Reading),
     NginxLogs(String),
     NginxCertificates(arcnix_core::nginx::Certificates),
+    Redis(arcnix_core::redis::Reading),
+    RedisKeys(arcnix_core::redis::ScanPage),
+    RedisKeyValue(arcnix_core::redis::KeyValue),
+    RedisDiagnostics(arcnix_core::redis::Diagnostics),
+    RedisWritten,
 }
 pub fn handle(session: &RemoteSession, action: Action) -> anyhow::Result<Reply> {
     Ok(match action {
@@ -211,6 +241,46 @@ pub fn handle(session: &RemoteSession, action: Action) -> anyhow::Result<Reply> 
         }
         Action::NginxCertificates(command) => {
             Reply::NginxCertificates(arcnix_core::nginx::read_certificates(session, &command)?)
+        }
+        Action::RedisRead(auth) => Reply::Redis(arcnix_core::redis::read(session, &auth)?),
+        Action::RedisScan {
+            endpoint,
+            auth,
+            db,
+            cursor,
+            pattern,
+        } => Reply::RedisKeys(arcnix_core::redis::scan_keys(
+            session,
+            &endpoint,
+            auth.as_ref(),
+            db,
+            &cursor,
+            &pattern,
+        )?),
+        Action::RedisReadKey {
+            endpoint,
+            auth,
+            db,
+            key,
+        } => Reply::RedisKeyValue(arcnix_core::redis::read_key(
+            session,
+            &endpoint,
+            auth.as_ref(),
+            db,
+            &key,
+        )?),
+        Action::RedisDiagnostics { endpoint, auth } => Reply::RedisDiagnostics(
+            arcnix_core::redis::read_diagnostics(session, &endpoint, auth.as_ref())?,
+        ),
+        Action::RedisWrite {
+            mode,
+            endpoint,
+            auth,
+            db,
+            op,
+        } => {
+            arcnix_core::redis::write_key(session, &endpoint, auth.as_ref(), db, mode, &op)?;
+            Reply::RedisWritten
         }
         Action::DockerOperate(id, operation) => {
             session.apply_container_operation(&id, &operation)?;

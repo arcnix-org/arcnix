@@ -37,7 +37,7 @@ use shared::*;
 use shell::*;
 use software::{
     app_center_ui, compose_ui, docker_ui, installation_ui, nginx_ui, pgadmin_native, pgadmin_ui,
-    software_install_ui,
+    redis_ui, software_install_ui,
 };
 use terminals::{terminal, *};
 use worker::{Action, Request, Update};
@@ -87,6 +87,8 @@ enum Dialog {
     DockerRemoveImage,
     DockerLogins,
     NginxNewSite,
+    RedisNewKey,
+    RedisDeleteKey,
     TerminalRename {
         id: u64,
     },
@@ -168,6 +170,7 @@ enum WorkspacePage {
     Settings,
     PgAdmin,
     Nginx,
+    Redis,
 }
 
 impl WorkspacePage {
@@ -295,6 +298,7 @@ define_state! {
         server_apps: server_apps_ui::DesktopState = Default::default(),
         docker: docker_ui::DockerState = Default::default(),
         nginx: nginx_ui::NginxState = Default::default(),
+        redis: redis_ui::RedisState = Default::default(),
         disks: disks_ui::DiskState = Default::default(),
         compose: compose_ui::ComposeState = Default::default(),
         install: software_install_ui::InstallState = Default::default(),
@@ -1052,13 +1056,13 @@ impl Ui {
                     s.office_viewports.clear();
                     desktop_file_picker::dismiss(s);
                     file_elevation::reset(s);
-                    if matches!(s.dialog, Some(Dialog::DesktopTimeZone | Dialog::DesktopIcons | Dialog::DockShortcuts | Dialog::Launcher | Dialog::SystemPower(..) | Dialog::ConfirmOfficeSave(_))) {
+                    if matches!(s.dialog, Some(Dialog::DesktopTimeZone | Dialog::DesktopIcons | Dialog::DockShortcuts | Dialog::Launcher | Dialog::SystemPower(..) | Dialog::ConfirmOfficeSave(_) | Dialog::RedisNewKey | Dialog::RedisDeleteKey)) {
                         s.dialog = None;
                     }
                 });
                 events.player.close(events);
                 #[cfg(any(windows, target_os = "linux"))]
-                events.close_web_browser();operations::connection_lost(events);terminal::disconnected(events);software::on_connection_lost(events,&message);state.revise(|s|{s.metrics=Default::default();resource_ports_ui::reset(s);s.system_logs=Default::default();s.session_rules.clear();s.queue_rules.clear();s.transfer_conflict=None;s.transfer_conflicts.clear();s.files_uploads.abort();for (id,c) in &s.cancels{c.store(true,Ordering::Relaxed);s.transfer_pauses.remove(id);}if s.dialog==Some(Dialog::TransferConflict){s.dialog=None;}s.connected=false;s.trash[1]=Default::default();s.file_browser.reset(true);s.code=Default::default();s.sync_scope=None;s.server_apps=Default::default();s.docker=Default::default();pgadmin_ui::reset(s);s.disks=Default::default();s.compose=Default::default();s.install=Default::default();s.workbench.fullscreen=false;s.connecting=false;s.remote_ready=false;s.remote.clear();s.remote_selection.clear();s.remote_request=0;s.fingerprint=None;for j in &mut s.jobs {if Some(&j.server_id)==s.selected.as_ref() && j.status==TransferStatus::Queued{j.status=TransferStatus::Cancelled;}}});events.log(format!("SSH 连接已断开：{message}"));},
+                events.close_web_browser();operations::connection_lost(events);terminal::disconnected(events);software::on_connection_lost(events,&message);state.revise(|s|{s.metrics=Default::default();resource_ports_ui::reset(s);s.system_logs=Default::default();s.session_rules.clear();s.queue_rules.clear();s.transfer_conflict=None;s.transfer_conflicts.clear();s.files_uploads.abort();for (id,c) in &s.cancels{c.store(true,Ordering::Relaxed);s.transfer_pauses.remove(id);}if s.dialog==Some(Dialog::TransferConflict){s.dialog=None;}s.connected=false;s.trash[1]=Default::default();s.file_browser.reset(true);s.code=Default::default();s.sync_scope=None;s.server_apps=Default::default();s.docker=Default::default();s.redis=Default::default();pgadmin_ui::reset(s);s.disks=Default::default();s.compose=Default::default();s.install=Default::default();s.workbench.fullscreen=false;s.connecting=false;s.remote_ready=false;s.remote.clear();s.remote_selection.clear();s.remote_request=0;s.fingerprint=None;for j in &mut s.jobs {if Some(&j.server_id)==s.selected.as_ref() && j.status==TransferStatus::Queued{j.status=TransferStatus::Cancelled;}}});events.log(format!("SSH 连接已断开：{message}"));},
             Update::TransferConflict(id,info,reply)=>transfer_ui::show(events,id,info,reply),
             Update::TransferPlan(id,plan)=>state.revise(|s|transfer_details::plan(s,&id,&plan)),
             Update::TransferFile(id,progress)=>state.revise(|s|{transfer_details::update(s,&id,progress);s.transfer_now=std::time::Instant::now();let waiting=transfer_details::waiting(s,&id)||workspace::transfer_paused(s,&id);if let Some(m)=s.transfer_meters.get_mut(&id){if waiting{m.pause(s.transfer_now);}else{m.resume(s.transfer_now);}}}),
@@ -1245,6 +1249,7 @@ impl Ui {
                 s.software = Default::default();
                 s.server_apps = Default::default();
                 s.docker = Default::default();
+                s.redis = Default::default();
                 pgadmin_ui::reset(s);
                 s.disks = Default::default();
                 s.compose = Default::default();
@@ -1288,6 +1293,8 @@ impl Ui {
                         | Dialog::DesktopTimeZone
                         | Dialog::DesktopIcons
                         | Dialog::DockShortcuts
+                        | Dialog::RedisNewKey
+                        | Dialog::RedisDeleteKey
                 )
             )
         }) {
@@ -1321,6 +1328,7 @@ impl Ui {
             s.software = Default::default();
             s.server_apps = Default::default();
             s.docker = Default::default();
+            s.redis = Default::default();
             pgadmin_ui::reset(s);
             s.disks = Default::default();
             s.compose = Default::default();
@@ -1943,6 +1951,8 @@ fn modal_with_header(
                             | Dialog::ConfirmOfficeSave(_)
                             | Dialog::DesktopIcons
                             | Dialog::DockShortcuts
+                            | Dialog::RedisNewKey
+                            | Dialog::RedisDeleteKey
                     )
                 )
         });
@@ -2296,6 +2306,7 @@ fn app(ui: Ui) -> impl Widget {
                     software_install_ui::dialogs(ui.clone()),
                     fragment(docker_ui::dialogs(ui.clone())),
                     fragment(nginx_ui::dialogs(ui.clone())),
+                    fragment(redis_ui::dialogs(ui.clone())),
                     terminal_menu::dialogs(ui.clone()),
                     resource_ports_ui::dialog(ui.clone()),
                 )),
