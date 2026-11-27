@@ -160,6 +160,12 @@
             if (matchesPaste(event)) {
                 event.preventDefault(); emit({kind:'paste', id}); return false;
             }
+            // Ctrl+/ is a terminal alias for Ctrl+_ (ASCII unit separator).
+            if (event.key === '/' && event.ctrlKey && !event.altKey && !event.metaKey && !event.getModifierState('AltGraph')) {
+                event.preventDefault();
+                term.input('\x1f');
+                return false;
+            }
             return true;
         });
         // Escape, Ctrl+K etc. belong to the shell, not Glory's app shortcuts.
