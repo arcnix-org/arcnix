@@ -83,7 +83,7 @@ dependencies = [
 
 [[package]]
 name = "arcnix"
-version = "0.3.11"
+version = "0.3.12"
 dependencies = [
  "anyhow",
  "arcnix-core",
@@ -130,7 +130,7 @@ dependencies = [
 
 [[package]]
 name = "arcnix-core"
-version = "0.3.11"
+version = "0.3.12"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
