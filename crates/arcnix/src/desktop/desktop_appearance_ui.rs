@@ -115,24 +115,54 @@ fn accent_swatch(Rgb([red, green, blue]): Rgb) -> glory::style::Style {
     }
 }
 
-fn accent_controls(ui: Ui) -> impl Widget {
+const PRESET_ACCENTS: [Rgb; 36] = [
+    Rgb([0x3b, 0x7a, 0xd3]),
+    Rgb([0x00, 0x73, 0xe5]),
+    Rgb([0x00, 0x63, 0xb1]),
+    Rgb([0x2d, 0x7d, 0x9a]),
+    Rgb([0x00, 0x99, 0xbc]),
+    Rgb([0x00, 0xb7, 0xc3]),
+    Rgb([0x30, 0x82, 0x80]),
+    Rgb([0x24, 0x96, 0x88]),
+    Rgb([0x00, 0xb2, 0x94]),
+    Rgb([0x42, 0x97, 0x50]),
+    Rgb([0x60, 0xbc, 0x46]),
+    Rgb([0x4b, 0x85, 0x01]),
+    Rgb([0xc8, 0x88, 0x00]),
+    Rgb([0xff, 0xb9, 0x00]),
+    Rgb([0xfe, 0xc6, 0x00]),
+    Rgb([0xf9, 0x81, 0x1f]),
+    Rgb([0xe9, 0x54, 0x20]),
+    Rgb([0xca, 0x50, 0x10]),
+    Rgb([0xbf, 0x47, 0x49]),
+    Rgb([0xda, 0x34, 0x50]),
+    Rgb([0xff, 0x51, 0x53]),
+    Rgb([0xef, 0x69, 0x50]),
+    Rgb([0xf6, 0x4e, 0x9e]),
+    Rgb([0xc3, 0x00, 0x52]),
+    Rgb([0xb3, 0x4c, 0xb3]),
+    Rgb([0x9a, 0x00, 0x89]),
+    Rgb([0x74, 0x4d, 0xa9]),
+    Rgb([0x8b, 0x66, 0xcb]),
+    Rgb([0x77, 0x64, 0xd8]),
+    Rgb([0x8e, 0x8c, 0xd8]),
+    Rgb([0x68, 0x76, 0x8a]),
+    Rgb([0x51, 0x5c, 0x6b]),
+    Rgb([0x65, 0x7b, 0x69]),
+    Rgb([0x56, 0x7c, 0x73]),
+    Rgb([0xb3, 0x91, 0x69]),
+    Rgb([0x7e, 0x73, 0x5f]),
+];
+
+fn accent_choices(ui: Ui) -> impl Widget {
     let state = ui.state;
     let ready = state.map(choices_ready);
-
-    row().class("theme-accent-controls").fill((
-        row()
-            .class("theme-accent-options")
-            .role(Role::Group)
-            .name(i18n::bind("Accent color"))
-            .fill(fragment(
-                [
-                    Rgb([59, 122, 211]),
-                    Rgb([36, 150, 136]),
-                    Rgb([66, 151, 80]),
-                    Rgb([204, 138, 41]),
-                    Rgb([191, 71, 73]),
-                    Rgb([139, 102, 203]),
-                ]
+    row()
+        .class("theme-accent-options")
+        .role(Role::Group)
+        .name(i18n::bind("Accent color"))
+        .fill(fragment(
+            PRESET_ACCENTS
                 .into_iter()
                 .map(|color| {
                     let ui = ui.clone();
@@ -149,8 +179,16 @@ fn accent_controls(ui: Ui) -> impl Widget {
                         .on_press(move || set_accent(&ui, color))
                 })
                 .collect::<Vec<_>>(),
-            )),
-        widget(move |scope| {
+        ))
+}
+
+fn accent_controls(ui: Ui) -> impl Widget {
+    let state = ui.state;
+    let ready = state.map(choices_ready);
+
+    row()
+        .class("theme-accent-controls")
+        .fill(widget(move |scope| {
             let active = state.map(accent_color).with_partial_eq();
             let draft = scope.cage(active.get().to_string());
             scope.effect(move || {
@@ -206,8 +244,7 @@ fn accent_controls(ui: Ui) -> impl Widget {
                     }
                 })
                 .show_in(scope)
-        }),
-    ))
+        }))
 }
 
 fn options<T: Copy + PartialEq + 'static>(
@@ -323,6 +360,7 @@ pub(crate) fn controls(ui: Ui) -> impl Widget {
                         ),
                     ),
                     settings_row("Accent color", accent_controls(ui.clone())),
+                    accent_choices(ui.clone()),
                 )),
             icon_controls(ui.clone()),
             crate::desktop_customization_ui::wallpaper_controls(ui),

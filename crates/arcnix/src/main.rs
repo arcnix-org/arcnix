@@ -2370,6 +2370,19 @@ const APP_CSS: &str = concat!(
 const APP_CSS: &str = include_str!("style.css");
 
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    #[cfg(windows)]
+    {
+        // WebView2 owns the native color popup. Keep its color controls but
+        // omit the screen sampler, which does not work in this host.
+        const ARGS: &str = "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS";
+        let mut args = std::env::var_os(ARGS).unwrap_or_default();
+        if !args.is_empty() {
+            args.push(" ");
+        }
+        args.push("--disable-features=EyeDropper");
+        // SAFETY: Startup has not spawned any threads yet.
+        unsafe { std::env::set_var(ARGS, args) };
+    }
     #[cfg(target_os = "linux")]
     if std::env::var_os("WEBKIT_DMABUF_RENDERER_FORCE_SHM").is_none() {
         // Shared-memory transport avoids blank views on virtual GPUs. Unlike
