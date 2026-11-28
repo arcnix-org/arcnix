@@ -25,7 +25,7 @@
         const art = desktop.querySelector('.desktop-wallpaper-art');
         if (!art) return;
         const source = desktop.querySelector('.desktop-wallpaper-source')?.textContent.trim() || '';
-        const custom = /^\/wallpaper-cache\/[a-f0-9]{64}\/[a-f0-9]{64}\/[a-f0-9]{64}\.(png|jpg|jpeg|webp|gif|bmp)$/.test(source) ? source : '';
+        const custom = /^\/wallpaper-cache\/[a-f0-9]{64}\.(png|jpg|webp|gif|bmp)$/.test(source) ? source : '';
         const key = art.className + (custom || desktop.classList.contains('desktop-dark'));
         const previous = wallpapers.get(art);
         const reduced = reducedMotion.matches;

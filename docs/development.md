@@ -106,9 +106,11 @@ cargo run --locked -p arcnix --bin arcnix -- --config ./my-config.json
 
 在服务器桌面的 **Settings → Appearance → Wallpaper** 中，**Add Wallpaper** 从当前服务器的文件选择器选择已有图片，不上传或修改服务器上的原图。支持 PNG、JPEG、WebP、GIF 和 BMP，单个文件不超过 8 MiB，最多添加 32 张。壁纸卡片只显示图片和选中标记，名称保留为辅助技术标签。
 
-客户端先在服务器上计算 SHA-256；本地缓存内容一致时复用原图，不重新传输；若服务器不能运行哈希辅助命令，则通过受限的 SFTP 读取验证，仍可使用壁纸，无需安装 Python。首次添加、内容变化或缓存损坏时下载并验证，再在本机生成独立的 320×180 PNG 缩略图。缓存位于当前配置旁的 `wallpaper-cache`，按 SSH 身份作用域、源路径和内容哈希隔离；目录卡片只请求缩略图，桌面背景使用缓存原图。重新连接和手动选择自定义壁纸时重新核对哈希，因此文件大小和修改时间相同的内容变化也会被发现。图片无法读取或解码时，保留此前选择并显示错误。
+客户端在添加、重新连接和手动选择壁纸时核对服务器文件的 SHA-256。服务器支持哈希辅助命令时，只需传回摘要即可复用已缓存的图片。缺少辅助命令时，客户端通过 SFTP 读取最多 8 MiB 并计算摘要。即使文件大小和修改时间相同，也能识别内容变化。
 
-服务器偏好保存图片路径列表和当前选择，不保存本机缓存路径。Wallpaper 标题栏的恢复图标只恢复当前主题的默认壁纸，悬停或键盘聚焦时提示“恢复主题壁纸”（Restore theme wallpaper），并保留无障碍名称；切换或恢复主题也会保留已添加的列表、缓存和服务器原图。自定义壁纸卡片悬停或键盘聚焦时显示垃圾桶图标（Remove wallpaper），从列表移除并清理该服务器、该路径的本地缓存；若移除的是当前壁纸，则恢复主题默认壁纸，移除其他图片时保留当前选择。该功能不会删除服务器原图。内置壁纸和 Themes 预览使用单独打包的 320×180 WebP 缩略图；更新原图后可运行 `python tools/generate_wallpaper_thumbnails.py` 重新生成（需要 Pillow）。专项验证：`python tools/wallpaper_cache_smoke.py`。
+客户端在 `config.json` 旁的 `wallpaper-cache/` 中将原图保存为 `<SHA-256>.<扩展名>`，将本机生成的 320×180 WebP 缩略图保存为 `<SHA-256>-thumb.webp`。同一内容在不同服务器、不同路径之间共用这两个文件。桌面背景使用原图，图库只请求缩略图。原图损坏时重新下载并校验，只有缩略图损坏时可从缓存原图重建。`sources.json` 按连接作用域和源路径记录最近成功校验的内容哈希。读取或解码新图片失败时保留原有引用。
+
+服务器偏好保存图片路径列表和当前选择，不保存本机缓存路径。Wallpaper 标题栏的恢复图标只恢复当前主题的默认壁纸，悬停或键盘聚焦时提示“恢复主题壁纸”（Restore theme wallpaper），并保留无障碍名称；切换或恢复主题也会保留已添加的列表、缓存和服务器原图。自定义壁纸卡片悬停或键盘聚焦时显示垃圾桶图标（Remove wallpaper），从列表移除该来源。来源被移除或改用新内容后，只有旧内容的最后一条本地引用消失时，才清理对应的原图和缩略图。若移除的是当前壁纸，则恢复主题默认壁纸，移除其他图片时保留当前选择。该功能不会删除服务器原图。内置壁纸和 Themes 预览使用单独打包的 320×180 WebP 缩略图；更新原图后可运行 `python tools/generate_wallpaper_thumbnails.py` 重新生成（需要 Pillow）。专项验证：`python tools/wallpaper_cache_smoke.py`。
 
 ## 文件冲突
 
@@ -287,7 +289,7 @@ Linux SSH 桌面按数据的共享范围和用途选择目录。桌面配置的�
 | 桌面公共设置 | `~/.arcnix/desktop/system.json`、`~/.arcnix/desktop/preferences/desktop.json` | 前者保存语言、时钟和快捷键等系统设置，后者保存桌面布局、主题和壁纸路径。 |
 | 应用偏好与窗口状态 | `~/.arcnix/desktop/apps/<应用标识>.json` | 随同一 SSH 账户的桌面配置同步。例如 `browser.json` 保存浏览器书签和窗口状态。 |
 | 每个客户端独立的浏览器数据 | `~/.arcnix/browser/profiles/<客户端 ID>/cookies.enc` | 保存加密 Cookie，独立于桌面配置同步。同目录的 `.arcnix-sync.lock` 用于协调读写。 |
-| 可重新生成的壁纸缓存 | 客户端 `config.json` 旁的 `wallpaper-cache/` | 按服务器和源文件路径缓存原图、缩略图。桌面配置引用服务器图片路径。 |
+| 可重新生成的壁纸缓存 | 客户端 `config.json` 旁的 `wallpaper-cache/` | 原图与缩略图按内容 SHA-256 共用。`sources.json` 记录各来源对应的哈希。桌面配置引用服务器图片路径。 |
 
 `~/.arcnix/desktop` 是当前配置入口，指向 `desktop-revisions/generation.*/` 中生效的那一代目录。
 

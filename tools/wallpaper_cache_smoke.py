@@ -1,6 +1,7 @@
 """Verify remote wallpaper import, local thumbnail assets, hash refresh, and persistence."""
 import time
 import subprocess
+from hashlib import sha256
 
 from PIL import Image
 
@@ -46,6 +47,8 @@ def main():
     with Peer(out / 'peer') as peer:
         source = peer.root / 'custom 海岸.png'
         Image.new('RGB', (3840, 2160), '#326a91').save(source)
+        duplicate = peer.root / 'copy.png'
+        duplicate.write_bytes(source.read_bytes())
         # A real 4K source must remain distinct from the small gallery image.
         assert source.stat().st_size < 8 * 1024 * 1024
         original_size = source.stat().st_size
@@ -77,10 +80,10 @@ def main():
             assert restore_bounds['x'] + restore_bounds['width'] > bounds['x'] + bounds['width'] - 24
             previews = gallery.locator('.wallpaper-preview').evaluate_all(
                 'els => els.map(el => getComputedStyle(el).backgroundImage)')
-            assert all('/wallpapers/thumbnails/' in url for url in previews)
             themes = app.page.locator('.theme-wallpaper-swatch').evaluate_all(
                 'els => els.map(el => getComputedStyle(el).backgroundImage)')
-            assert themes and all('/wallpapers/thumbnails/' in url for url in themes)
+            assert previews and themes
+            assert all('/wallpapers/thumbnails/' in url and url.endswith('.webp")') for url in previews + themes)
             sizes = app.page.locator('.wallpaper-preview').evaluate_all("""async elements => Promise.all(elements.map(async el => {
                 const image = new Image();
                 image.src = getComputedStyle(el).backgroundImage.slice(5, -2);
@@ -100,25 +103,45 @@ def main():
             eventually(lambda: small.evaluate('el => el.complete && el.naturalWidth === 320 && el.naturalHeight === 180'))
             full_url = full.get_attribute('src')
             thumbnail_url = small.get_attribute('src')
-            assert full_url != thumbnail_url and '-thumb.png' in thumbnail_url
+            assert full_url != thumbnail_url and thumbnail_url.endswith('-thumb.webp')
             assert '/wallpaper-cache/' in full_url
             expect(gallery.locator('.custom-wallpaper-choice')).to_have_text('')
             eventually(lambda: read_desktop_settings(prefs).get('appearance', {}).get('wallpaper') == {'remote': '/custom 海岸.png'})
-            cache_files = list((out / 'desktop/wallpaper-cache').rglob('*-thumb.png'))
-            assert len(cache_files) == 1
-            cached_thumbnail = cache_files[0]
+            cache = out / 'desktop/wallpaper-cache'
+            digest = sha256(source.read_bytes()).hexdigest()
+            cached_image = cache / f'{digest}.png'
+            cached_thumbnail = cache / f'{digest}-thumb.webp'
+            assert cached_image.read_bytes() == source.read_bytes()
             with Image.open(cached_thumbnail) as preview:
-                assert preview.size == (320, 180)
+                assert preview.format == 'WEBP' and preview.size == (320, 180)
             stamp = cached_thumbnail.stat().st_mtime_ns
             gallery.get_by_role('button', name='Custom wallpaper: /custom 海岸.png', exact=True).click()
             expect(gallery.get_by_role('button', name='Add Wallpaper', exact=True)).to_be_enabled()
             assert cached_thumbnail.stat().st_mtime_ns == stamp
             eventually(lambda: len((peer.root / 'wallpaper-hashes.log').read_text().splitlines()) >= 2)
+            choose(app, gallery, duplicate.name)
+            expect(small).to_have_count(2)
+            assert full.get_attribute('src') == full_url
+            assert small.evaluate_all('els => els.map(el => el.getAttribute("src"))') == [thumbnail_url] * 2
+            assert list(cache.glob('*-thumb.*')) == [cached_thumbnail]
+            assert cached_thumbnail.stat().st_mtime_ns == stamp
             Image.new('RGB', (3840, 2160), '#915932').save(source)
             assert source.stat().st_size == original_size
             gallery.get_by_role('button', name='Custom wallpaper: /custom 海岸.png', exact=True).click()
             eventually(lambda: full.get_attribute('src') != full_url)
-            eventually(lambda: small.get_attribute('src') != thumbnail_url)
+            copy_entry = gallery.locator('.custom-wallpaper-entry').filter(
+                has=app.page.get_by_role('button', name='Custom wallpaper: /copy.png', exact=True))
+            expect(copy_entry.locator('.custom-wallpaper-thumbnail')).to_have_attribute('src', thumbnail_url)
+            assert cached_image.is_file() and cached_thumbnail.is_file()
+            copy_entry.hover()
+            copy_entry.get_by_role('button', name='Remove wallpaper').click()
+            expect(small).to_have_count(1)
+            assert small.get_attribute('src') != thumbnail_url
+            eventually(lambda: not cached_image.exists() and not cached_thumbnail.exists())
+            assert duplicate.is_file()
+            digest = sha256(source.read_bytes()).hexdigest()
+            cached_image = cache / f'{digest}.png'
+            cached_thumbnail = cache / f'{digest}-thumb.webp'
             choose(app, gallery, 'broken.png')
             expect(gallery.locator('.wallpaper-error')).not_to_have_text('')
             expect(gallery.locator('.custom-wallpaper-choice')).to_have_count(1)
@@ -154,7 +177,7 @@ def main():
             remove.click()
             expect(gallery.locator('.custom-wallpaper-choice')).to_have_count(0)
             expect(app.page.locator('.desktop-wallpaper-image')).not_to_be_visible()
-            eventually(lambda: not cached_thumbnail.parent.exists())
+            eventually(lambda: not cached_image.exists() and not cached_thumbnail.exists())
             eventually(lambda: read_desktop_settings(prefs).get('appearance', {}).get('wallpapers', []) == [])
             assert source.read_bytes() == before_remove
             choose(app, gallery, source.name)
@@ -168,7 +191,7 @@ def main():
             entry.get_by_role('button', name='Remove wallpaper', exact=True).click()
             expect(gallery.locator('.custom-wallpaper-choice')).to_have_count(0)
             expect(valley).to_have_attribute('aria-pressed', 'true')
-            eventually(lambda: not cached_thumbnail.parent.exists())
+            eventually(lambda: not cached_image.exists() and not cached_thumbnail.exists())
             eventually(lambda: read_desktop_settings(prefs).get('appearance', {}).get('wallpapers', []) == [])
             assert source.read_bytes() == before_remove
             app.stop()
