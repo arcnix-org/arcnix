@@ -1,4 +1,6 @@
-//! Content-addressed, server-scoped local wallpaper files and small gallery previews.
+//! Shared content-addressed wallpapers and previews, with per-source ownership.
+use std::collections::{BTreeMap, HashSet};
+use std::fs::{File, OpenOptions};
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
 
@@ -38,36 +40,95 @@ fn checked_hash(value: &str) -> bool {
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
-impl Request {
-    fn directory(&self) -> PathBuf {
-        self.root
-            .join(hash(self.scope.as_bytes()))
-            .join(hash(self.path.as_bytes()))
+// Only these names can be served or collected. Source paths never become local filenames.
+fn asset_name(name: &str) -> Option<(&str, &'static str)> {
+    let (stem, extension) = name.rsplit_once('.')?;
+    let digest = stem.strip_suffix("-thumb").unwrap_or(stem);
+    if !checked_hash(digest) || (stem != digest && extension != "png") {
+        return None;
+    }
+    let mime = match extension {
+        "png" => "image/png",
+        "jpg" => "image/jpeg",
+        "webp" => "image/webp",
+        "gif" => "image/gif",
+        "bmp" => "image/bmp",
+        _ => return None,
+    };
+    Some((digest, mime))
+}
+
+type Sources = BTreeMap<String, BTreeMap<String, String>>;
+
+struct Cache<'a> {
+    root: &'a Path,
+    _lock: File,
+}
+
+impl<'a> Cache<'a> {
+    fn lock(root: &'a Path) -> Result<Self> {
+        std::fs::create_dir_all(root)?;
+        let lock = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(root.join("sources.lock"))?;
+        lock.lock()?;
+        Ok(Self { root, _lock: lock })
     }
 
-    /// Remove this source's local cached versions, never the source image or another server's
-    /// files.
-    pub fn remove_cached(&self) -> Result<()> {
-        let directory = self.directory();
-        let metadata = match std::fs::symlink_metadata(&directory) {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+    fn set_source(&self, request: &Request, digest: Option<&str>) -> Result<()> {
+        let index = self.root.join("sources.json");
+        let mut sources: Sources = match File::open(&index) {
+            Ok(file) => serde_json::from_reader(file).context("Invalid wallpaper source index")?,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => BTreeMap::new(),
             Err(error) => return Err(error.into()),
         };
-        ensure!(
-            metadata.is_dir() && !metadata.is_symlink(),
-            "Invalid wallpaper cache directory"
-        );
-        let root = self.root.canonicalize()?;
-        let resolved = directory.canonicalize()?;
-        ensure!(
-            resolved
-                == root
-                    .join(hash(self.scope.as_bytes()))
-                    .join(hash(self.path.as_bytes())),
-            "Invalid wallpaper cache directory"
-        );
-        std::fs::remove_dir_all(resolved)?;
+        let current = sources
+            .get(&request.scope)
+            .and_then(|paths| paths.get(&request.path));
+        if current.map(String::as_str) != digest {
+            if let Some(digest) = digest {
+                sources
+                    .entry(request.scope.clone())
+                    .or_default()
+                    .insert(request.path.clone(), digest.into());
+            } else if let Some(paths) = sources.get_mut(&request.scope) {
+                paths.remove(&request.path);
+                if paths.is_empty() {
+                    sources.remove(&request.scope);
+                }
+            }
+            publish(&index, &serde_json::to_vec(&sources)?)?;
+        } else if digest.is_some() {
+            return Ok(());
+        }
+        // Commit references before collection. A later source change also collects objects
+        // left between a file publication and an index update by an interrupted process.
+        let retained: HashSet<&str> = sources
+            .values()
+            .flat_map(|paths| paths.values().map(String::as_str))
+            .collect();
+        for entry in std::fs::read_dir(self.root)? {
+            let entry = entry?;
+            if let Some((digest, _)) = entry.file_name().to_str().and_then(asset_name)
+                && !retained.contains(digest)
+                && !entry.file_type()?.is_dir()
+            {
+                std::fs::remove_file(entry.path())?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Request {
+    /// Forget this origin. Other origins can continue using the same local files.
+    pub fn remove_cached(&self) -> Result<()> {
+        if self.root.try_exists()? {
+            Cache::lock(&self.root)?.set_source(self, None)?;
+        }
         Ok(())
     }
 
@@ -132,44 +193,50 @@ impl Request {
         let digest = fingerprint()?;
         ensure!(checked_hash(&digest), "Invalid wallpaper content hash");
         let extension = crate::file_associations::extension(&self.path).unwrap();
-        let directory = self.directory();
+        let extension = if extension == "jpeg" {
+            "jpg"
+        } else {
+            &extension
+        };
         let image_name = format!("{digest}.{extension}");
         let thumbnail_name = format!("{digest}-thumb.png");
-        let image_path = directory.join(&image_name);
-        let thumbnail_path = directory.join(&thumbnail_name);
-        let cached = read_bounded(&image_path)
-            .ok()
-            .filter(|bytes| hash(bytes) == digest);
-        if cached.is_none() || !valid_thumbnail(&thumbnail_path) {
-            let bytes = match cached {
-                Some(bytes) => bytes,
-                None => read()?,
-            };
-            ensure!(
-                !bytes.is_empty() && bytes.len() <= LIMIT,
-                "Images must be nonempty and at most 8 MiB"
-            );
-            ensure!(
-                hash(&bytes) == digest,
-                "Wallpaper changed while downloading. Try again."
-            );
-            let thumbnail = thumbnail(&bytes, &extension)?;
-            std::fs::create_dir_all(&directory)?;
-            // Each file is published only after validation. Content-specific URLs avoid stale
-            // WebView images.
-            publish(&image_path, &bytes)?;
-            publish(&thumbnail_path, &thumbnail)?;
-        }
-        let prefix = format!(
-            "/wallpaper-cache/{}/{}/",
-            hash(self.scope.as_bytes()),
-            hash(self.path.as_bytes())
-        );
-        Ok(Cached {
+        let image_path = self.root.join(&image_name);
+        let thumbnail_path = self.root.join(&thumbnail_name);
+        let result = Cached {
             path: self.path.clone(),
-            image: format!("{prefix}{image_name}"),
-            thumbnail: format!("{prefix}{thumbnail_name}"),
-        })
+            image: format!("/wallpaper-cache/{image_name}"),
+            thumbnail: format!("/wallpaper-cache/{thumbnail_name}"),
+        };
+        let cached = {
+            let cache = Cache::lock(&self.root)?;
+            let cached = read_bounded(&image_path)
+                .ok()
+                .filter(|bytes| hash(bytes) == digest);
+            if cached.is_some() && valid_thumbnail(&thumbnail_path) {
+                cache.set_source(self, Some(&digest))?;
+                return Ok(result);
+            }
+            cached
+        };
+        // Leave the shared lock free during network I/O and decoding.
+        let bytes = match cached {
+            Some(bytes) => bytes,
+            None => read()?,
+        };
+        ensure!(
+            !bytes.is_empty() && bytes.len() <= LIMIT,
+            "Images must be nonempty and at most 8 MiB"
+        );
+        ensure!(
+            hash(&bytes) == digest,
+            "Wallpaper changed while downloading. Try again."
+        );
+        let preview = thumbnail(&bytes, extension)?;
+        let cache = Cache::lock(&self.root)?;
+        publish(&image_path, &bytes)?;
+        publish(&thumbnail_path, &preview)?;
+        cache.set_source(self, Some(&digest))?;
+        Ok(result)
     }
 }
 
@@ -208,9 +275,10 @@ fn thumbnail(bytes: &[u8], extension: &str) -> Result<Vec<u8>> {
 }
 
 fn valid_thumbnail(path: &Path) -> bool {
-    let Ok(mut reader) = ImageReader::open(path) else {
+    let Ok(bytes) = read_bounded(path) else {
         return false;
     };
+    let mut reader = ImageReader::with_format(Cursor::new(bytes), ImageFormat::Png);
     let mut limits = image::Limits::default();
     limits.max_image_width = Some(320);
     limits.max_image_height = Some(180);
@@ -222,6 +290,10 @@ fn valid_thumbnail(path: &Path) -> bool {
 }
 
 fn read_bounded(path: &Path) -> Result<Vec<u8>> {
+    ensure!(
+        std::fs::symlink_metadata(path)?.is_file(),
+        "Invalid wallpaper cache file"
+    );
     let file = std::fs::File::open(path)?;
     ensure!(
         file.metadata()?.len() <= LIMIT as u64,
@@ -235,38 +307,9 @@ fn read_bounded(path: &Path) -> Result<Vec<u8>> {
 
 /// Only generated cache URLs are readable; no arbitrary file paths enter the asset provider.
 pub fn asset(root: &Path, url: &str) -> Option<(&'static str, Vec<u8>)> {
-    let mut segments = url.strip_prefix("/wallpaper-cache/")?.split('/');
-    let scope = segments.next()?;
-    let source = segments.next()?;
-    let name = segments.next()?;
-    if segments.next().is_some() || !checked_hash(scope) || !checked_hash(source) {
-        return None;
-    }
-    let (stem, extension) = name.rsplit_once('.')?;
-    if !checked_hash(stem.strip_suffix("-thumb").unwrap_or(stem)) {
-        return None;
-    }
-    let mime = match extension {
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "webp" => "image/webp",
-        "gif" => "image/gif",
-        "bmp" => "image/bmp",
-        _ => return None,
-    };
-    let path = root.join(scope).join(source).join(name);
-    if !path
-        .canonicalize()
-        .ok()?
-        .starts_with(root.canonicalize().ok()?)
-    {
-        return None;
-    }
-    let metadata = std::fs::symlink_metadata(&path).ok()?;
-    if !metadata.is_file() || metadata.len() > LIMIT as u64 {
-        return None;
-    }
-    Some((mime, read_bounded(&path).ok()?))
+    let name = url.strip_prefix("/wallpaper-cache/")?;
+    let (_, mime) = asset_name(name)?;
+    Some((mime, read_bounded(&root.join(name)).ok()?))
 }
 
 #[cfg(test)]
@@ -300,18 +343,27 @@ mod tests {
         let (_, small) = asset(root.path(), &original.thumbnail).unwrap();
         let decoded = image::load_from_memory(&small)?;
         assert_eq!((decoded.width(), decoded.height()), (320, 180));
+        let other = Request {
+            scope: "server-b".into(),
+            ..request.clone()
+        };
+        let shared = other.load(
+            || Ok(hash(&first)),
+            || panic!("reuse the original from server A"),
+        )?;
+        assert_eq!(shared.image, original.image);
         let replacement = request.load(|| Ok(hash(&changed)), || Ok(changed.clone()))?;
         assert_ne!(original.image, replacement.image);
         assert_ne!(original.thumbnail, replacement.thumbnail);
         assert_eq!(asset(root.path(), &replacement.image).unwrap().1, changed);
 
-        let other = Request {
-            scope: "server-b".into(),
-            ..request.clone()
-        };
-        let isolated = other.load(|| Ok(hash(&first)), || Ok(first.clone()))?;
-        assert_ne!(isolated.image, original.image);
+        assert_eq!(asset(root.path(), &original.image).unwrap().1, first);
+        other.remove_cached()?;
+        assert!(asset(root.path(), &original.image).is_none());
+        assert!(asset(root.path(), &original.thumbnail).is_none());
+        assert!(asset(root.path(), &replacement.thumbnail).is_some());
         assert!(asset(root.path(), "/wallpaper-cache/../../config.json").is_none());
+        assert!(asset(root.path(), "/wallpaper-cache/sources.json").is_none());
         Ok(())
     }
 
@@ -356,6 +408,13 @@ mod tests {
             disguised
                 .load(|| Ok(hash(&bytes)), || Ok(bytes.clone()))
                 .is_err()
+        );
+        assert_eq!(asset(root.path(), &cached.image).unwrap().1, bytes);
+        let sources: Sources =
+            serde_json::from_reader(File::open(root.path().join("sources.json"))?)?;
+        assert_eq!(
+            sources[&request.scope],
+            BTreeMap::from([(request.path.clone(), hash(&bytes))])
         );
         let svg = Request {
             path: "/external.svg".into(),
@@ -414,7 +473,7 @@ mod tests {
     }
 
     #[test]
-    fn removal_is_scoped_to_one_server_and_source() -> Result<()> {
+    fn identical_sources_share_assets_until_the_last_reference_is_removed() -> Result<()> {
         let temporary = tempfile::tempdir()?;
         let root = temporary.path().join("cache");
         let original = temporary.path().join("source.bmp");
@@ -433,17 +492,63 @@ mod tests {
             path: "/other.bmp".into(),
             ..selected.clone()
         };
-        let load = |request: &Request| request.load(|| Ok(hash(&bytes)), || Ok(bytes.clone()));
-        let removed = load(&selected)?;
-        let retained_server = load(&other_server)?;
-        let retained_image = load(&other_image)?;
+        let removed = selected.load(|| Ok(hash(&bytes)), || Ok(bytes.clone()))?;
+        let reuse =
+            |request: &Request| request.load(|| Ok(hash(&bytes)), || panic!("duplicate download"));
+        let retained_server = reuse(&other_server)?;
+        let retained_image = reuse(&other_image)?;
+        assert_eq!(removed.image, retained_server.image);
+        assert_eq!(removed.thumbnail, retained_image.thumbnail);
+        assert_eq!(
+            removed.image,
+            format!("/wallpaper-cache/{}.bmp", hash(&bytes))
+        );
         selected.remove_cached()?;
         selected.remove_cached()?;
+        assert!(asset(&selected.root, &retained_server.image).is_some());
+        other_server.remove_cached()?;
+        assert!(asset(&selected.root, &retained_image.thumbnail).is_some());
+        other_image.remove_cached()?;
         assert!(asset(&selected.root, &removed.image).is_none());
         assert!(asset(&selected.root, &removed.thumbnail).is_none());
-        assert!(asset(&selected.root, &retained_server.image).is_some());
-        assert!(asset(&selected.root, &retained_image.thumbnail).is_some());
         assert_eq!(std::fs::read(original)?, bytes);
+        Ok(())
+    }
+
+    #[test]
+    fn jpeg_aliases_and_concurrent_imports_keep_both_references() -> Result<()> {
+        let root = tempfile::tempdir()?;
+        let first = Request {
+            root: root.path().into(),
+            scope: "server".into(),
+            path: "/one.jpeg".into(),
+        };
+        let second = Request {
+            path: "/two.JPG".into(),
+            ..first.clone()
+        };
+        let mut output = Cursor::new(Vec::new());
+        image::RgbImage::from_pixel(16, 9, image::Rgb([1u8, 2, 3]))
+            .write_to(&mut output, ImageFormat::Jpeg)?;
+        let bytes = output.into_inner();
+        let barrier = std::sync::Barrier::new(2);
+        let load = |request: &Request| {
+            barrier.wait();
+            request.load(|| Ok(hash(&bytes)), || Ok(bytes.clone()))
+        };
+        let (a, b) = std::thread::scope(|scope| {
+            let a = scope.spawn(|| load(&first));
+            let b = load(&second);
+            (a.join().unwrap(), b)
+        });
+        let (a, b) = (a?, b?);
+        assert_eq!(a.image, b.image);
+        assert!(a.image.ends_with(".jpg"));
+        assert_eq!(a.thumbnail, b.thumbnail);
+        second.remove_cached()?;
+        assert!(asset(root.path(), &a.image).is_some());
+        first.remove_cached()?;
+        assert!(asset(root.path(), &b.thumbnail).is_none());
         Ok(())
     }
 }
