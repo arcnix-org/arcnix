@@ -5,7 +5,6 @@ use std::io;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, ensure};
-use directories::ProjectDirs;
 
 const DLL: &str = "libmpv-2.dll";
 
@@ -21,9 +20,7 @@ pub(super) fn library_path() -> Result<PathBuf> {
     let member = archive.by_name(DLL)?;
     let cache_name = format!("libmpv-{:08x}-{}", member.crc32(), member.size());
     drop(member);
-    let project = ProjectDirs::from("org", "Arcnix", "Arcnix")
-        .context("Cannot locate the local media runtime directory")?;
-    let cache = project.cache_dir().join("media");
+    let cache = arcnix_core::paths::media_cache_dir()?;
     let installed = cache.join(cache_name);
     let dll = installed.join(DLL);
     if dll.is_file() {

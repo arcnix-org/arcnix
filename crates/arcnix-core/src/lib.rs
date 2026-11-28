@@ -15,7 +15,7 @@ pub use automation::{
     scripts, startup_services, target_selection, task_capabilities, task_records, task_result,
     task_stops, tasks,
 };
-pub use config::{model, preferences, server_labels, store};
+pub use config::{model, paths, preferences, server_labels, store};
 use connection::private_program;
 #[cfg(windows)]
 pub use connection::wsl;
