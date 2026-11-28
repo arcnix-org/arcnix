@@ -52,12 +52,12 @@ def main():
             try:
                 expect(close).to_be_focused()
                 expect(close).to_have_css('outline-style', 'none')
-                settings.get_by_role('button', name='Reset', exact=True).hover()
+                settings.get_by_role('button', name='Restore file view defaults', exact=True).hover()
             finally:
                 page.mouse.up()
             expect(close).to_have_css('outline-style', 'none')
             page.keyboard.press('Shift+Tab')
-            expect(settings.get_by_role('button', name='Reset', exact=True)).to_be_focused()
+            expect(settings.get_by_role('button', name='Restore file view defaults', exact=True)).to_be_focused()
             page.keyboard.press('Tab')
             expect(close).to_be_focused()
             expect(close).to_have_css('outline-style', 'solid')

@@ -431,16 +431,16 @@ fn shortcut_controls(ui: Ui, terms: Bond<String>, search: impl Widget) -> impl W
         text().class("subtle shortcut-search-empty").content(i18n::bind("No matching shortcuts.")),
         fragment(GROUPS.iter().map(move |(scope, definitions)| {
             let scope = *scope;
-            let title = match scope {
-                ShortcutScope::Desktop => "Desktop",
-                ShortcutScope::Terminal => "Terminal",
-                ShortcutScope::Files => server_desktop::app_label(WorkspacePage::Files(0)),
-                ShortcutScope::Code => server_desktop::app_label(WorkspacePage::Code),
+            let (title, restore_label) = match scope {
+                ShortcutScope::Desktop => ("Desktop", "Restore default shortcuts for Desktop"),
+                ShortcutScope::Terminal => ("Terminal", "Restore default shortcuts for Terminal"),
+                ShortcutScope::Files => (server_desktop::app_label(WorkspacePage::Files(0)), "Restore default shortcuts for Files"),
+                ShortcutScope::Code => (server_desktop::app_label(WorkspacePage::Code), "Restore default shortcuts for Code Editor"),
             };
-            let reset = ui.clone();
+            let restore = ui.clone();
             col().class("desktop-settings-card desktop-shortcut-group").fill((
-                settings::section_heading(title, true, settings::reset_button(true, move || {
-                    change(&reset, |keys, _| {
+                settings::section_heading(title, true, settings::restore_button(true, restore_label, move || {
+                    change(&restore, |keys, _| {
                         keys.reset_scope(scope);
                         Ok(())
                     });
@@ -449,7 +449,7 @@ fn shortcut_controls(ui: Ui, terms: Bond<String>, search: impl Widget) -> impl W
                     let action = definition.action;
                     let label = definition.label;
                     let enable = ui.clone();
-                    let reset = ui.clone();
+                    let restore = ui.clone();
                     let modified = state.map(move |s| keys(s).modified(action));
                     row().class(state.map(move |s| {
                         if terms.with(|q| matching_shortcut(s, q, title, label, action)) {
@@ -517,17 +517,13 @@ fn shortcut_controls(ui: Ui, terms: Bond<String>, search: impl Widget) -> impl W
                                     text().class("desktop-key-recording").content(i18n::bind("Press shortcut…")),
                                 )),
                             when(modified, move || {
-                                let reset = reset.clone();
-                                sapid::button()
-                                    .class("icon-button desktop-shortcut-reset")
-                                    .name(i18n::bind(state.map(move |s| {
-                                        let preset = keys(s).preset;
-                                        let chord = preset.display(preset.default_key(action));
-                                        format!("Reset shortcut: {label} (Default: {chord})")
-                                    })))
-                                    .enabled(state.map(editing))
-                                    .fill(icons::glyph(Icon::Refresh))
-                                    .on_press(move || change(&reset, |keys, preset| keys.reset(preset, action)))
+                                let restore = restore.clone();
+                                settings::restore_button(true, state.map(move |s| {
+                                    let preset = keys(s).preset;
+                                    let chord = preset.display(preset.default_key(action));
+                                    format!("Restore shortcut: {label} (Default: {chord})")
+                                }), move || change(&restore, |keys, preset| keys.reset(preset, action)))
+                                .enabled(state.map(editing))
                             }),
                         )),
                     ))

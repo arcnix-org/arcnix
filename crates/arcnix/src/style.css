@@ -209,8 +209,8 @@
 .activity-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
 .workspace-content .settings-section .log-save-switch { margin-top: 0; }
 .log-file-options { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 16px; }
-.settings-reset { display: inline-flex !important; align-items: center; gap: 6px; flex: none; margin-inline-start: auto; }
-.settings-reset .action-glyph { width: 14px; height: 14px; }
+:is(.settings-card-heading, .modal-header) > .settings-restore { margin-inline-start: auto; }
+.settings-restore .action-glyph { width: 16px; height: 16px; }
 .context-title.help-heading{justify-content:space-between;gap:8px}
 .context-title.help-heading>.help-tip{margin-left:auto}
 .field-label{font-size:var(--font-label);line-height:1.5}
@@ -1362,15 +1362,11 @@ input,textarea,select{font:inherit}input{height:36px}textarea{line-height:1.6}
   background: transparent !important; color: var(--text) !important; border: 0 !important; outline: 0;
 }
 .theme-preset-select::before { content: ''; position: absolute; inset: 0; border-radius: 9px; }
-.desktop-appearance .wallpaper-name {
-  position: relative; padding: 6px 24px 4px 7px; text-align: start; line-height: 1.45;
-}
 .desktop-appearance .button.wallpaper-choice[aria-pressed=true],
 .desktop-appearance .button.wallpaper-choice[aria-pressed=true]:hover {
   border-color: var(--accent) !important; background: var(--choice-tint) !important; color: var(--text) !important;
 }
-.theme-preset-select[aria-pressed=true]::after,
-.desktop-appearance [aria-pressed=true] > .wallpaper-name::after {
+.theme-preset-select[aria-pressed=true]::after {
   content: ''; position: absolute; inset-inline-end: 9px; top: calc(50% - 6px);
   width: 6px; height: 11px; border: solid var(--accent); border-width: 0 2px 2px 0;
   transform: rotate(45deg);
@@ -1586,9 +1582,8 @@ input,textarea,select{font:inherit}input{height:36px}textarea{line-height:1.6}
 .desktop-shortcut-extra { display: inline-flex; align-items: center; gap: 3px; }
 .desktop-shortcut-error:not(:empty) { position: sticky; top: 0; z-index: 1; padding: 8px; background: var(--surface); }
 .desktop-settings-status:empty, .desktop-settings-page .error:empty { display: none; }
-.wallpaper-choice { display: flex !important; min-width: 0; flex-direction: column; align-items: stretch; gap: 6px; padding: 5px 5px 7px !important; }
+.wallpaper-choice { position: relative; display: flex !important; min-width: 0; flex-direction: column; align-items: stretch; gap: 6px; padding: 5px 5px 7px !important; }
 .wallpaper-swatch { height: auto; aspect-ratio: 16 / 9; border-radius: 5px; overflow: hidden; }
-.wallpaper-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @container desktop-settings (max-width: 620px) {
   .desktop-settings-tabs { padding: 7px; }
   .desktop-settings-section { min-height: 34px; gap: 5px; padding: 4px 5px !important; }
@@ -2690,22 +2685,46 @@ html.desktop-motion { view-transition-name: none; }
   align-items: center;
   gap: 4px;
 }
-.desktop-transfers .transfer-progress-button {
-  display: grid;
-  grid-template-columns: 14px 22px auto;
-  align-items: center;
-  gap: 4px;
-  height: 26px;
-  min-height: 26px;
-  padding: 2px 5px;
-  border-radius: 5px;
+.desktop-transfers .transfer-indicator {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
 }
-.desktop-transfers .action-glyph { width: 14px; height: 14px; flex: none; }
-.transfer-summary-track, .transfer-summary-fill { grid-row: 1; grid-column: 2; height: 3px; border-radius: 3px; }
-.transfer-summary-track { width: 22px; height: 3px; border-radius: 3px; overflow: hidden; background: var(--line); }
-.transfer-summary-fill { justify-self: start; background: var(--accent); }
-.transfer-summary-percent { min-width: 3ch; text-align: end; font-size: var(--font-small); font-variant-numeric: tabular-nums; }
-.desktop-menubar .transfer-progress-button { color: inherit; }
+.transfer-indicator > * { grid-area: 1 / 1; }
+.transfer-indicator > .sapid-progress-ring { pointer-events: none; z-index: 1; }
+.desktop-transfers .transfer-progress-button { color: var(--muted) !important; border-radius: 50% !important; }
+.desktop-transfers .action-glyph { width: 14px; height: 14px; min-width: 14px; min-height: 14px; }
+.transfer-indicator:is(.running, .preparing) .transfer-progress-button { color: var(--accent) !important; }
+.transfer-indicator .sapid-progress-track path { stroke: var(--line-hover); }
+.transfer-indicator .sapid-progress-arc path { stroke: var(--accent); }
+.transfer-indicator:is(.paused, .conflict) .sapid-progress-arc path { stroke: var(--muted); }
+.transfer-indicator:is(.completed, .failed, .cancelled) .sapid-progress-ring { display: none !important; }
+.transfer-indicator:is(.failed, .conflict) .transfer-progress-button { color: var(--danger) !important; }
+.transfer-indicator:is(.failed, .conflict, .paused)::before, .transfer-count:not(:empty) {
+  position: absolute;
+  inset-inline-end: -2px;
+  bottom: -1px;
+  z-index: 2;
+  min-width: 12px;
+  padding: 0 2px;
+  border: 1px solid var(--surface);
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--on-accent, white);
+  font: bold 9px/12px system-ui, sans-serif;
+  text-align: center;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.transfer-indicator:is(.failed, .conflict)::before { content: "!"; background: var(--danger); color: white; }
+.transfer-indicator.paused::before { content: "Ⅱ"; background: var(--muted); color: var(--surface); }
+.transfer-indicator:is(.paused, .conflict) .transfer-count { visibility: hidden; }
+.transfer-count:empty { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .transfer-indicator.completed .action-glyph { animation: transfer-finished 4s ease-out; }
+  @keyframes transfer-finished { 0%, 70% { color: var(--accent); } }
+}
 .files-download-drop { display: none !important; }
 html[data-files-downloading] .files-download-drop {
   display: flex !important;
@@ -2730,14 +2749,6 @@ html[data-files-downloading] .files-download-drop {
   padding: 0;
 }
 .transfer-progress-modal .queue-list { max-height: min(390px, 50dvh); }
-@media (max-width: 950px) {
-  .desktop-transfers .transfer-progress-button { grid-template-columns: 14px 14px auto; }
-  .desktop-transfers .transfer-summary-track { width: 14px; }
-}
-@media (max-width: 720px) {
-  .desktop-transfers .transfer-progress-button { grid-template-columns: 14px 14px; }
-  .desktop-transfers .transfer-summary-percent { display: none; }
-}
 .app-browser { --tile-tint: #3e9ac5; --tile-shade: #155777; }
 .app-browser .desktop-app-icon { color: #e7fbff; }
 .app-browser > .desktop-window-titlebar > .desktop-window-title { display: none; }
@@ -3468,3 +3479,53 @@ button,
 .plot-gpu .resource-trend-dedicated { grid-column-start:1; }
 .plot-gpu:not(:has(> .resource-trend-shared)) > .resource-trend-dedicated,
 .plot-gpu:not(:has(> .resource-trend-dedicated)) > .resource-trend-shared { grid-column:1/-1; }
+
+/* Gallery cards always load separate thumbnails, never full-size wallpaper assets. */
+.wallpaper-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-inline-start: auto; }
+.wallpaper-choice .wallpaper-swatch { width: 100%; object-fit: cover; }
+.wallpaper-choice[aria-pressed=true]::before {
+  content: ''; position: absolute; inset-inline-end: 9px; bottom: 9px;
+  width: 24px; height: 24px; border-radius: 50%; background: #17212de6; z-index: 1;
+}
+.wallpaper-choice[aria-pressed=true]::after {
+  content: ''; position: absolute; inset-inline-end: 17px; bottom: 17px;
+  width: 6px; height: 10px; border: solid white; border-width: 0 2px 2px 0;
+  transform: rotate(45deg); z-index: 2;
+}
+.wallpaper-error:empty, .wallpaper-loading:empty { display: none; }
+.wallpaper-preview.wallpaper-prism, .wallpaper-preview.wallpaper-prism-light { background-image: url("/wallpapers/thumbnails/prism-light.webp"); }
+.desktop-dark .wallpaper-preview.wallpaper-prism, .wallpaper-preview.wallpaper-prism-dark { background-image: url("/wallpapers/thumbnails/prism-dark.webp"); }
+.wallpaper-preview.wallpaper-valley, .wallpaper-preview.wallpaper-valley-light { background-image: url("/wallpapers/thumbnails/valley-light.webp"); }
+.desktop-dark .wallpaper-preview.wallpaper-valley, .wallpaper-preview.wallpaper-valley-dark { background-image: url("/wallpapers/thumbnails/valley-dark.webp"); }
+.wallpaper-preview.wallpaper-tide, .wallpaper-preview.wallpaper-tide-light { background-image: url("/wallpapers/thumbnails/tide-light.webp"); }
+.desktop-dark .wallpaper-preview.wallpaper-tide, .wallpaper-preview.wallpaper-tide-dark { background-image: url("/wallpapers/thumbnails/tide-dark.webp"); }
+.wallpaper-preview.wallpaper-clay, .wallpaper-preview.wallpaper-clay-light { background-image: url("/wallpapers/thumbnails/clay-light.webp"); }
+.desktop-dark .wallpaper-preview.wallpaper-clay, .wallpaper-preview.wallpaper-clay-dark { background-image: url("/wallpapers/thumbnails/clay-dark.webp"); }
+.wallpaper-preview.wallpaper-meadow, .wallpaper-preview.wallpaper-meadow-light { background-image: url("/wallpapers/thumbnails/meadow-light.webp"); }
+.desktop-dark .wallpaper-preview.wallpaper-meadow, .wallpaper-preview.wallpaper-meadow-dark { background-image: url("/wallpapers/thumbnails/meadow-dark.webp"); }
+.wallpaper-preview.wallpaper-fjord, .wallpaper-preview.wallpaper-fjord-light { background-image: url("/wallpapers/thumbnails/fjord-daylight.webp"); }
+.desktop-dark .wallpaper-preview.wallpaper-fjord, .wallpaper-preview.wallpaper-fjord-dark { background-image: url("/wallpapers/thumbnails/fjord.webp"); }
+.wallpaper-preview.wallpaper-aurora, .wallpaper-preview.wallpaper-aurora-light { background-image: url("/wallpapers/thumbnails/aurora-twilight.webp"); }
+.desktop-dark .wallpaper-preview.wallpaper-aurora, .wallpaper-preview.wallpaper-aurora-dark { background-image: url("/wallpapers/thumbnails/aurora-night.webp"); }
+.wallpaper-preview.wallpaper-seaside, .wallpaper-preview.wallpaper-seaside-sunrise { background-image: url("/wallpapers/thumbnails/seaside-sunrise.webp"); }
+.desktop-dark .wallpaper-preview.wallpaper-seaside, .wallpaper-preview.wallpaper-seaside-moonrise { background-image: url("/wallpapers/thumbnails/seaside-moonrise.webp"); }
+
+.wallpaper-entry { position: relative; min-width: 0; }
+.wallpaper-entry > .wallpaper-choice { width: 100%; height: 100%; box-sizing: border-box; }
+.wallpaper-custom-mark {
+  position: absolute;
+  inset-block-start: 9px;
+  inset-inline-start: 9px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  background: rgb(20 25 32 / 72%);
+  color: white;
+  pointer-events: none;
+}
+.wallpaper-custom-mark .action-glyph { width: 12px; height: 12px; min-width: 0; min-height: 0; }
+.wallpaper-remove { position: absolute !important; inset-inline-end: 9px; top: 9px; z-index: 3; opacity: 0; pointer-events: none; background: var(--surface) !important; border: 1px solid var(--line-hover) !important; }
+.custom-wallpaper-entry:is(:hover, :focus-within) > .wallpaper-remove { opacity: 1; pointer-events: auto; }
+@media (hover: none) { .custom-wallpaper-entry > .wallpaper-remove { opacity: 1; pointer-events: auto; } }

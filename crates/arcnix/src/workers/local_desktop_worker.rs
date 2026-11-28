@@ -46,6 +46,11 @@ impl Session {
                 choices: Vec::new(),
             }),
             AppAction::FileLocations => Reply::FileLocations(target.locations(&self.home)?),
+            AppAction::RemoveWallpaperCache(request) => {
+                request.remove_cached()?;
+                Reply::WallpaperRemoved
+            }
+            AppAction::ReadWallpaper(request) => Reply::Wallpaper(request.local(target)?),
             AppAction::ReadImage(path) => Reply::Image(target.read_image(&path)?.into()),
             AppAction::FileItem(path) => Reply::FileItem(target.metadata(&path)?),
             AppAction::PickerEntries(paths) => {

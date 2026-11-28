@@ -82,28 +82,33 @@ where
 
 pub(crate) fn display(ui: Ui) -> impl Widget {
     fragment((
-        settings::panel_with_reset(
+        settings::panel_with_action(
             &ui,
             navigation::SettingsSection::Files,
             "File sizes",
-            file_sizes_reset(&ui, false),
+            restore_file_size_defaults(&ui, false),
             size_options(&ui, false),
         ),
-        settings::panel_with_reset(
+        settings::panel_with_action(
             &ui,
             navigation::SettingsSection::Files,
             "Dates and times",
-            settings::local_reset(&ui, false, |s, defaults| {
-                s.display.dates = defaults.display.dates;
-                s.display.timezone = defaults.display.timezone;
-            }),
+            settings::restore_local_defaults(
+                &ui,
+                false,
+                "Restore date and time defaults",
+                |s, defaults| {
+                    s.display.dates = defaults.display.dates;
+                    s.display.timezone = defaults.display.timezone;
+                },
+            ),
             date_options(&ui),
         ),
     ))
 }
 
-pub(crate) fn file_sizes_reset(ui: &Ui, desktop: bool) -> sapid::Button {
-    settings::local_reset(ui, desktop, |s, defaults| {
+pub(crate) fn restore_file_size_defaults(ui: &Ui, desktop: bool) -> sapid::Button {
+    settings::restore_local_defaults(ui, desktop, "Restore file size defaults", |s, defaults| {
         s.display.units = defaults.display.units;
         s.display.decimals = defaults.display.decimals;
         s.display.group_digits = defaults.display.group_digits;
@@ -219,8 +224,8 @@ pub(crate) fn date_options(ui: &Ui) -> impl Widget + use<> {
     ))
 }
 pub(crate) fn connection(ui: Ui) -> impl Widget {
-    settings::panel_with_reset(&ui,navigation::SettingsSection::Connection,"Timeout and keepalive",
-        settings::local_reset(&ui, false, |s, defaults| s.connection = defaults.connection), col().class("preferences-stack").fill((
+    settings::panel_with_action(&ui,navigation::SettingsSection::Connection,"Timeout and keepalive",
+        settings::restore_local_defaults(&ui, false, "Restore connection defaults", |s, defaults| s.connection = defaults.connection), col().class("preferences-stack").fill((
         setting_field(false, "Connection timeout", preference_select(&ui, false, "Connection timeout",
             [5u32,15,30,60,120].map(|n| (n,format!("{n} seconds"))), |s| s.connection.timeout_seconds, |s,n| s.connection.timeout_seconds=n)),
         setting_field(false, "SSH keepalive", preference_select(&ui, false, "SSH keepalive",
@@ -270,17 +275,17 @@ fn policy(ui: Ui, direction: TransferDirection) -> impl Widget {
 pub(crate) fn transfers(ui: Ui) -> impl Widget {
     let edit = ui.clone();
     let apply = ui.clone();
-    let reset = ui.clone();
+    let restore = ui.clone();
     fragment((
-        settings::panel_with_reset(
+        settings::panel_with_action(
             &ui,
             navigation::SettingsSection::Transfers,
             "Concurrent transfers",
-            settings::reset_button(false, move || {
-                reset.update_preferences(|s| s.transfer_concurrency = AppSettings::default().transfer_concurrency);
-                if reset.state.with(|s| s.settings.error.is_empty()) {
-                    reset.state.revise(|s| s.settings.transfer_concurrency_draft = None);
-                    reset.schedule();
+            settings::restore_button(false, "Restore default transfer limit", move || {
+                restore.update_preferences(|s| s.transfer_concurrency = AppSettings::default().transfer_concurrency);
+                if restore.state.with(|s| s.settings.error.is_empty()) {
+                    restore.state.revise(|s| s.settings.transfer_concurrency_draft = None);
+                    restore.schedule();
                 }
             }),
             col().class("preferences-stack").fill((
@@ -319,8 +324,8 @@ pub(crate) fn transfers(ui: Ui) -> impl Widget {
                 text().class("subtle").content(i18n::bind("Choose 1–16 simultaneous files (default 5). Uploads and downloads share this limit. Lowering it lets active files finish before more start.")),
             )),
         ),
-        settings::panel_with_reset(&ui,navigation::SettingsSection::Transfers,"Existing files",
-            settings::local_reset(&ui, false, |s, defaults| {
+        settings::panel_with_action(&ui,navigation::SettingsSection::Transfers,"Existing files",
+            settings::restore_local_defaults(&ui, false, "Restore file conflict defaults", |s, defaults| {
                 s.upload_conflict = defaults.upload_conflict;
                 s.download_conflict = defaults.download_conflict;
             }), col().class("preferences-stack").fill((
@@ -333,7 +338,7 @@ pub(crate) fn logging(ui: Ui) -> impl Widget {
     let export = ui.clone();
     let activity = ui.clone();
     let state = ui.state;
-    let reset = ui.clone();
+    let restore = ui.clone();
     fragment((
         settings::panel(
             &ui,
@@ -377,13 +382,13 @@ pub(crate) fn logging(ui: Ui) -> impl Widget {
         ),
         log_files(ui),
         when(state.map(|s| s.settings_section == navigation::SettingsSection::Logging), move || {
-            let reset = reset.clone();
-            let writable = reset.writable;
+            let restore = restore.clone();
+            let writable = restore.writable;
             row().class("choice-list").fill(
-                btn("Restore logging defaults", move || {
-                    reset.update_preferences(|s| s.logging = LogSettings::default());
-                    if reset.state.with(|s| s.settings.error.is_empty()) {
-                        reset.state.revise(|s| {
+                settings::restore_button(false, "Restore logging defaults", move || {
+                    restore.update_preferences(|s| s.logging = LogSettings::default());
+                    if restore.state.with(|s| s.settings.error.is_empty()) {
+                        restore.state.revise(|s| {
                             s.settings.log_directory_draft = None;
                             s.settings.log_error.clear();
                             s.settings.open_log_feedback.clear();
@@ -762,10 +767,10 @@ pub(crate) fn server_transfer_dialog(ui: Ui) -> impl Widget {
         state.map(|s| s.dialog == Some(Dialog::TransferDefaults)),
         move || {
             let close = ui.clone();
-            let reset = ui.clone();
-            modal_with_header(ui.clone(),"Transfer defaults",settings::reset_button(false, move || {
+            let restore = ui.clone();
+            modal_with_header(ui.clone(),"Transfer defaults",settings::restore_button(false, "Use application transfer defaults", move || {
                 if let Some(server) = state.with(|s| s.selected.clone()) {
-                    reset.reset_conflict_rules(&server);
+                    restore.reset_conflict_rules(&server);
                 }
             }),col().class("preferences-stack").fill((
         text().class("section-title").content(state.map(|s|s.config.servers.iter().find(|p|Some(&p.id)==s.selected.as_ref()).map(|p|p.name.clone()).unwrap_or_default())),

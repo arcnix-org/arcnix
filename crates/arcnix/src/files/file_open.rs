@@ -596,10 +596,13 @@ fn matching_extensions(s: &State) -> Vec<ExtensionRow> {
         .collect()
 }
 
-pub(crate) fn reset_settings(ui: &Ui, desktop: bool) -> sapid::Button {
-    settings::local_reset(ui, desktop, |s, defaults| {
-        s.file_associations = defaults.file_associations
-    })
+pub(crate) fn restore_file_associations(ui: &Ui, desktop: bool) -> sapid::Button {
+    settings::restore_local_defaults(
+        ui,
+        desktop,
+        "Restore default file associations",
+        |s, defaults| s.file_associations = defaults.file_associations,
+    )
 }
 
 pub(crate) fn settings(ui: Ui, desktop: bool) -> impl Widget {
@@ -899,16 +902,20 @@ pub(crate) fn settings_dialog(ui: Ui) -> impl Widget {
     when(
         state.map(|s| matches!(s.dialog, Some(Dialog::FileAssociation { .. }))),
         move || {
-            let reset = ui.clone();
+            let restore = ui.clone();
             let done = ui.clone();
             modal_with_header(
                 ui.clone(),
                 "File association",
-                settings::reset_button(state.with(server_desktop::visible), move || {
-                    if let Some(ext) = state.with(edited_extension) {
-                        set_default(&reset, &ext, None);
-                    }
-                })
+                settings::restore_button(
+                    state.with(server_desktop::visible),
+                    "Restore default app for this file type",
+                    move || {
+                        if let Some(ext) = state.with(edited_extension) {
+                            set_default(&restore, &ext, None);
+                        }
+                    },
+                )
                 .enabled(state.map(|s| {
                     edited_extension(s)
                         .is_some_and(|ext| explicit_default(&s.config.settings, &ext).is_some())

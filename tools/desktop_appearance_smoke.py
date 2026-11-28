@@ -86,7 +86,7 @@ def check_appearance_choices(panel):
         'Aurora': ('aurora-twilight', 'aurora-night'),
         'Seaside': ('seaside-sunrise', 'seaside-moonrise'),
     }
-    expect(gallery.locator('.wallpaper-choice')).to_have_text(list(presets))
+    expect(gallery.locator('.wallpaper-choice')).to_have_text([''] * len(presets))
     selected_wallpaper = gallery.locator('.wallpaper-choice[aria-pressed=true]')
     background = panel.page.locator('.desktop-wallpaper-art')
     preset_accents = set()
@@ -122,22 +122,22 @@ def check_appearance_choices(panel):
             expect(line_icons).to_be_focused()
             override = 'Aurora' if preset == 'Seaside' else 'Seaside'
             gallery.get_by_role('button', name=f'{override} wallpaper', exact=True).click()
-            expect(selected_wallpaper).to_have_text(override)
-            gallery.get_by_role('button', name='Reset', exact=True).click()
-            expect(selected_wallpaper).to_have_text(preset)
+            expect(selected_wallpaper).to_have_attribute('aria-label', f'{override} wallpaper')
+            gallery.get_by_role('button', name='Restore theme wallpaper', exact=True).click()
+            expect(selected_wallpaper).to_have_attribute('aria-label', f'{preset} wallpaper')
             expect(background).to_have_class(f'desktop-wallpaper-art wallpaper-{preset.lower()}')
             swatches = card.locator('.theme-wallpaper-swatch')
             images = swatches.evaluate_all('els => els.map(el => getComputedStyle(el).backgroundImage)')
             for image, asset in zip(images, assets, strict=True):
-                assert image.endswith(f'/wallpapers/{asset}.webp")'), image
+                assert image.endswith(f'/wallpapers/thumbnails/{asset}.webp")'), image
             active_image = images[0 if mode == 'Light' else 1]
-            expect(background).to_have_css('background-image', active_image)
+            expect(background).to_have_css('background-image', active_image.replace('/thumbnails/', '/'))
             expect(selected_wallpaper.locator('.wallpaper-swatch')).to_have_css('background-image', active_image)
             if preset == 'Aurora':
                 assert background.evaluate('el => el.getAnimations({subtree: true}).length') == 0
             if preset == 'Aurora' and mode == 'Dark':
                 panel.locator('.setting-color-scheme:visible').get_by_role('radio', name='Auto', exact=True).check()
-                expect(selected_wallpaper).to_have_text('Aurora')
+                expect(selected_wallpaper).to_have_attribute('aria-label', 'Aurora wallpaper')
                 expect(background).to_have_class('desktop-wallpaper-art wallpaper-aurora')
     assert len(preset_accents) == 2 * len(presets)
     button('Fjord').click()
@@ -449,8 +449,8 @@ def main():
             expect(desktop).to_have_class('server-desktop theme-dark desktop-dark')
             dark_text = desktop.evaluate('e => getComputedStyle(e).color')
             gallery = panel.get_by_role('group', name='Wallpaper', exact=True)
-            gallery.get_by_role('button', name='Reset', exact=True).click()
-            expect(gallery.locator('.wallpaper-choice[aria-pressed=true]')).to_have_text('Seaside')
+            gallery.get_by_role('button', name='Restore theme wallpaper', exact=True).click()
+            expect(gallery.locator('.wallpaper-choice[aria-pressed=true]')).to_have_attribute('aria-label', 'Seaside wallpaper')
             expect(desktop.locator('.desktop-wallpaper-art')).to_have_class('desktop-wallpaper-art wallpaper-seaside')
 
             expect(panel.get_by_text('Theme default', exact=True)).to_have_count(0)
@@ -512,10 +512,10 @@ def main():
                     choices = gallery.locator('.wallpaper-choices')
                     choices.scroll_into_view_if_needed()
                     assert choices.evaluate('''grid => {
-                        const tiles = [...grid.children].filter(el => el.classList.contains('wallpaper-choice'));
+                        const tiles = [...grid.children].filter(el => el.classList.contains('wallpaper-entry'));
                         const bounds = grid.getBoundingClientRect();
                         const boxes = tiles.map(tile => tile.getBoundingClientRect());
-                        return boxes.length === 6 && boxes.at(-1).top > boxes[0].top &&
+                        return boxes.length === 8 && boxes.at(-1).top > boxes[0].top &&
                             boxes.every(box => box.left >= bounds.left - 1 && box.right <= bounds.right + 1);
                     }''')
                     panel.screenshot(path=str(out / 'compact-appearance.png'))

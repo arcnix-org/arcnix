@@ -987,17 +987,17 @@ fn folder_icon_picker(ui: Ui, path: String) -> impl Widget {
         let search_ref = scope.cage(None);
         let preview = path.clone();
         let tagged = path.clone();
-        let restore = path.clone();
+        let folder_path = path.clone();
         let current = path.clone();
-        let reset = ui.clone();
+        let restore = ui.clone();
         let done = ui.clone();
         let mounted = scope.mount_with(|| {
             modal_with_header(
                 ui.clone(),
                 "Customize folder",
-                settings::reset_button(true, move || {
-                    reset.change_files(|prefs| {
-                        prefs.folder_icons.remove(&restore);
+                settings::restore_button(true, "Restore default folder icon", move || {
+                    restore.change_files(|prefs| {
+                        prefs.folder_icons.remove(&folder_path);
                     });
                 })
                 .enabled(state.map(move |s| {

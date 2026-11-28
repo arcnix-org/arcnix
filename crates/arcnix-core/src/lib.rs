@@ -26,7 +26,7 @@ pub use connection::{
 use desktop::desktop_storage;
 pub use desktop::{
     browser, desktop_customization, desktop_shortcuts, desktop_theme, desktop_time_zone,
-    device_info, server_apps, settings_capabilities, sync,
+    device_info, server_apps, settings_capabilities, sync, wallpaper_cache,
 };
 pub use files::{deletion, file_associations, local, permissions, recycle, text_files, transfer};
 pub use maintenance::{

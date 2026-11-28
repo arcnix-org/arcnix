@@ -465,15 +465,25 @@ pub(crate) fn customization_css() -> String {
 }
 
 pub(crate) fn wallpaper(ui: Ui) -> impl Widget {
-    col().class(ui.state.map(|s| {
-        format!(
-            "desktop-wallpaper-art {}",
-            wallpaper_class(&desktop_appearance_ui::background(s))
-        )
-    }))
+    let state = ui.state;
+    // The transition script owns the contents of the art layer. Keep reactive nodes outside it.
+    fragment((
+        col().class(state.map(|s| {
+            format!(
+                "desktop-wallpaper-art {}",
+                wallpaper_class(&desktop_appearance_ui::background(s))
+            )
+        })),
+        text()
+            .class("desktop-wallpaper-source hidden")
+            .content(state.map(|s| wallpaper_ui::selected_image(s).unwrap_or_default())),
+    ))
 }
 
 fn wallpaper_class(wallpaper: &Wallpaper) -> &'static str {
+    if matches!(wallpaper, Wallpaper::Remote(_)) {
+        return "wallpaper-custom";
+    }
     BUILT_IN_WALLPAPERS
         .iter()
         .find(|(picture, ..)| picture == wallpaper)
@@ -1636,16 +1646,16 @@ pub(crate) fn shortcut_settings_dialog(ui: Ui) -> impl Widget {
             modal_with_header(
                 ui.clone(),
                 "System app icons",
-                settings::desktop_reset(&ui, move |prefs| {
+                settings::restore_desktop_defaults(&ui, "Restore system app icons", move |prefs| {
                     let appearance = &mut prefs.appearance;
                     if dock {
-                        reset_system_pins(&mut appearance.dock);
+                        restore_system_pins(&mut appearance.dock);
                         appearance
                             .dock
                             .order
                             .retain(|item| matches!(item, DockItem::App(_)));
                     } else {
-                        reset_desktop_app_icons(appearance);
+                        restore_desktop_app_icons(appearance);
                     }
                 }),
                 col().class("desktop-shortcut-options").fill(
@@ -1724,12 +1734,12 @@ pub(crate) fn shortcut_settings_dialog(ui: Ui) -> impl Widget {
     )
 }
 
-fn reset_system_pins(dock: &mut Dock) {
+fn restore_system_pins(dock: &mut Dock) {
     dock.unpinned.retain(|&app| !system_app(app));
     dock.extra_pins.retain(|&app| !system_app(app));
 }
 
-fn reset_desktop_app_icons(prefs: &mut Appearance) {
+fn restore_desktop_app_icons(prefs: &mut Appearance) {
     let defaults = Appearance::default();
     prefs.hidden.retain(|&app| !system_app(app));
     prefs
@@ -1779,11 +1789,15 @@ pub(crate) fn layout_controls(ui: Ui) -> impl Widget {
             settings::section_heading(
                 "Desktop layout",
                 true,
-                settings::desktop_reset(&ui, |prefs| {
-                    let defaults = Layout::default();
-                    prefs.appearance.layout.flow = defaults.flow;
-                    prefs.appearance.layout.direction = defaults.direction;
-                }),
+                settings::restore_desktop_defaults(
+                    &ui,
+                    "Restore default desktop layout",
+                    |prefs| {
+                        let defaults = Layout::default();
+                        prefs.appearance.layout.flow = defaults.flow;
+                        prefs.appearance.layout.direction = defaults.direction;
+                    },
+                ),
             ),
             settings_row(
                 "Icon arrangement",
@@ -1819,10 +1833,10 @@ pub(crate) fn icon_settings(ui: Ui) -> impl Widget {
         settings::section_heading(
             "Desktop icons",
             true,
-            settings::desktop_reset(&ui, |prefs| {
+            settings::restore_desktop_defaults(&ui, "Restore default desktop icons", |prefs| {
                 let appearance = &mut prefs.appearance;
                 let defaults = Appearance::default();
-                reset_desktop_app_icons(appearance);
+                restore_desktop_app_icons(appearance);
                 appearance.show_server = defaults.show_server;
                 appearance.order = defaults.order;
                 appearance.layout.size = defaults.layout.size;
@@ -1924,7 +1938,7 @@ pub(crate) fn dock_settings(ui: Ui) -> impl Widget {
                 settings::section_heading(
                     "Launcher",
                     true,
-                    settings::desktop_reset(&ui, |prefs| {
+                    settings::restore_desktop_defaults(&ui, "Restore launcher defaults", |prefs| {
                         let defaults = Dock::default();
                         prefs.appearance.dock.launcher_locations = defaults.launcher_locations;
                         prefs.appearance.dock.launcher_power = defaults.launcher_power;
@@ -1961,7 +1975,7 @@ fn dock_layout(ui: Ui) -> impl Widget {
             settings::section_heading(
                 "Dock layout",
                 true,
-                settings::desktop_reset(&ui, |prefs| {
+                settings::restore_desktop_defaults(&ui, "Restore default dock layout", |prefs| {
                     let defaults = Dock::default();
                     let dock = &mut prefs.appearance.dock;
                     dock.position = defaults.position;
@@ -2012,10 +2026,15 @@ fn dock_overview_settings(ui: Ui) -> impl Widget {
             settings::section_heading(
                 "App window overview",
                 true,
-                settings::desktop_reset(&ui, |prefs| {
-                    let defaults = Dock::default();
-                    prefs.appearance.dock.overview_active_click = defaults.overview_active_click;
-                }),
+                settings::restore_desktop_defaults(
+                    &ui,
+                    "Restore default window overview",
+                    |prefs| {
+                        let defaults = Dock::default();
+                        prefs.appearance.dock.overview_active_click =
+                            defaults.overview_active_click;
+                    },
+                ),
             ),
             settings_row(
                 "Click the active app",
@@ -2038,11 +2057,11 @@ fn dock_icons_settings(ui: Ui) -> impl Widget {
             settings::section_heading(
                 "Dock icons",
                 true,
-                settings::desktop_reset(&ui, |prefs| {
+                settings::restore_desktop_defaults(&ui, "Restore default dock icons", |prefs| {
                     let defaults = Dock::default();
                     let dock = &mut prefs.appearance.dock;
                     dock.order = defaults.order;
-                    reset_system_pins(dock);
+                    restore_system_pins(dock);
                     dock.size = defaults.size;
                     dock.icon_size = defaults.icon_size;
                     dock.panel_centered = defaults.panel_centered;
@@ -2099,7 +2118,7 @@ fn dock_status_settings(ui: Ui) -> impl Widget {
             settings::section_heading(
                 "Status bar",
                 true,
-                settings::desktop_reset(&ui, |prefs| {
+                settings::restore_desktop_defaults(&ui, "Restore status bar defaults", |prefs| {
                     prefs.appearance.dock.floating_status = Dock::default().floating_status;
                     prefs.clock = Default::default();
                 }),
@@ -2124,7 +2143,8 @@ fn dock_status_settings(ui: Ui) -> impl Widget {
 
 pub(crate) fn wallpaper_controls(ui: Ui) -> impl Widget {
     let state = ui.state;
-    let reset = ui.clone();
+    let restore_wallpaper = ui.clone();
+    let add = ui.clone();
     let ready = state.map(server_apps_ui::preferences_ready);
     col()
         .class("desktop-settings-card wallpaper-settings")
@@ -2134,39 +2154,116 @@ pub(crate) fn wallpaper_controls(ui: Ui) -> impl Widget {
             settings::section_heading(
                 "Wallpaper",
                 true,
-                settings::reset_button(true, move || {
-                    desktop_appearance_ui::set_background(&reset, None)
-                })
-                .enabled(ready),
+                row().class("wallpaper-actions").fill((
+                    i18n::text_action("Add Wallpaper", Icon::Plus)
+                        .class("button with-icon")
+                        .enabled(state.map(|s| {
+                            server_apps_ui::preferences_ready(s)
+                                && s.sftp_available
+                                && !wallpaper_ui::busy(s)
+                        }))
+                        .on_press(move || wallpaper_ui::browse(&add)),
+                    settings::restore_button(true, "Restore theme wallpaper", move || {
+                        desktop_appearance_ui::set_background(&restore_wallpaper, None)
+                    })
+                    .enabled(ready),
+                )),
             ),
             row().class("wallpaper-choices").fill(
-                BUILT_IN_WALLPAPERS
-                    .into_iter()
-                    .map(|(wallpaper, label, class)| {
-                        let choose = ui.clone();
-                        let selected = wallpaper.clone();
-                        sapid::button()
-                            .class("button wallpaper-choice")
-                            .name(i18n::bind(format!("{label} wallpaper")))
-                            .pressed(
-                                state
-                                    .map(move |s| desktop_appearance_ui::background(s) == selected),
-                            )
-                            .enabled(ready)
-                            .fill((
-                                text()
-                                    .class(format!("wallpaper-swatch {class}"))
-                                    .content(""),
-                                text().class("wallpaper-name").content(i18n::bind(label)),
-                            ))
-                            .on_press(move || {
-                                desktop_appearance_ui::set_background(
-                                    &choose,
-                                    Some(wallpaper.clone()),
+                each(state.map(|s| {
+                    BUILT_IN_WALLPAPERS
+                        .iter()
+                        .map(|(picture, ..)| picture.clone())
+                        .chain(
+                            appearance(s)
+                                .wallpapers
+                                .iter()
+                                .cloned()
+                                .map(Wallpaper::Remote),
+                        )
+                        .collect::<Vec<_>>()
+                }))
+                .key(|picture| format!("{picture:?}"))
+                .children(move |item| {
+                    let wallpaper = item.value.get();
+                    let choose = ui.clone();
+                    let selected = wallpaper.clone();
+                    let button = sapid::button()
+                        .class(if matches!(wallpaper, Wallpaper::Remote(_)) {
+                            "button wallpaper-choice custom-wallpaper-choice"
+                        } else {
+                            "button wallpaper-choice"
+                        })
+                        .pressed(
+                            state.map(move |s| desktop_appearance_ui::background(s) == selected),
+                        );
+                    if let Wallpaper::Remote(path) = wallpaper {
+                        let preview = path.clone();
+                        let remove_ui = ui.clone();
+                        let remove_path = path.clone();
+                        col().class("wallpaper-entry custom-wallpaper-entry").fill((
+                            button
+                                .name(i18n::bind(format!("Custom wallpaper: {path}")))
+                                .enabled(state.map(|s| {
+                                    server_apps_ui::preferences_ready(s) && !wallpaper_ui::busy(s)
+                                }))
+                                .fill(
+                                    glory::ui::image()
+                                        .class("wallpaper-swatch custom-wallpaper-thumbnail")
+                                        .source(state.map(move |s| {
+                                            s.server_apps
+                                                .wallpapers
+                                                .pictures
+                                                .get(&preview)
+                                                .map(|p| p.thumbnail.clone())
+                                                .unwrap_or_else(|| wallpaper_ui::EMPTY_IMAGE.into())
+                                        }))
+                                        .alt(""),
                                 )
-                            })
-                    })
-                    .collect::<Vec<_>>(),
+                                .on_press(move || wallpaper_ui::select(&choose, &path)),
+                            view()
+                                .class("wallpaper-custom-mark")
+                                .fill(icons::glyph(Icon::Tag)),
+                            sapid::button()
+                                .class("button icon-button wallpaper-remove")
+                                .name(i18n::bind("Remove wallpaper"))
+                                .fill(icons::glyph(Icon::Clear))
+                                .enabled(state.map(|s| {
+                                    server_apps_ui::preferences_ready(s) && !wallpaper_ui::busy(s)
+                                }))
+                                .on_press(move || wallpaper_ui::remove(&remove_ui, &remove_path)),
+                        ))
+                    } else {
+                        let (_, label, class) = BUILT_IN_WALLPAPERS
+                            .iter()
+                            .find(|(picture, ..)| *picture == wallpaper)
+                            .unwrap();
+                        col().class("wallpaper-entry").fill(
+                            button
+                                .name(i18n::bind(format!("{label} wallpaper")))
+                                .enabled(ready)
+                                .fill(
+                                    text()
+                                        .class(format!(
+                                            "wallpaper-swatch wallpaper-preview {class}"
+                                        ))
+                                        .content(""),
+                                )
+                                .on_press(move || {
+                                    desktop_appearance_ui::set_background(
+                                        &choose,
+                                        Some(wallpaper.clone()),
+                                    )
+                                }),
+                        )
+                    }
+                }),
             ),
+            text().class("subtle wallpaper-loading").content(i18n::bind(
+                state.map(|s| wallpaper_ui::status(s).to_owned()),
+            )),
+            text().class("error wallpaper-error").content(i18n::bind(
+                state.map(|s| s.server_apps.wallpapers.error.clone()),
+            )),
         ))
 }

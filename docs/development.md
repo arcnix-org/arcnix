@@ -102,6 +102,14 @@ cargo run --locked -p arcnix --bin arcnix -- --config ./my-config.json
 
 选择私钥认证后，**Private key file** 旁的 **Browse…** 打开 Windows 原生文件选择窗口。支持无扩展名和中文路径，默认定位到当前路径所在文件夹（或本机 `.ssh` 目录），取消时保留原值。选择器只回填路径，不读取私钥内容，仍允许手动输入。原生对话框使用 [Windows Common Item Dialog](https://learn.microsoft.com/en-us/windows/win32/shell/common-file-dialog)。
 
+## 服务器桌面壁纸
+
+在服务器桌面的 **Settings → Appearance → Wallpaper** 中，**Add Wallpaper** 从当前服务器的文件选择器选择已有图片，不上传或修改服务器上的原图。支持 PNG、JPEG、WebP、GIF 和 BMP，单个文件不超过 8 MiB，最多添加 32 张。壁纸卡片只显示图片和选中标记，名称保留为辅助技术标签。
+
+客户端先在服务器上计算 SHA-256；本地缓存内容一致时复用原图，不重新传输；若服务器不能运行哈希辅助命令，则通过受限的 SFTP 读取验证，仍可使用壁纸，无需安装 Python。首次添加、内容变化或缓存损坏时下载并验证，再在本机生成独立的 320×180 PNG 缩略图。缓存位于当前配置旁的 `wallpaper-cache`，按 SSH 身份作用域、源路径和内容哈希隔离；目录卡片只请求缩略图，桌面背景使用缓存原图。重新连接和手动选择自定义壁纸时重新核对哈希，因此文件大小和修改时间相同的内容变化也会被发现。图片无法读取或解码时，保留此前选择并显示错误。
+
+服务器偏好保存图片路径列表和当前选择，不保存本机缓存路径。Wallpaper 标题栏的恢复图标只恢复当前主题的默认壁纸，悬停或键盘聚焦时提示“恢复主题壁纸”（Restore theme wallpaper），并保留无障碍名称；切换或恢复主题也会保留已添加的列表、缓存和服务器原图。自定义壁纸卡片悬停或键盘聚焦时显示垃圾桶图标（Remove wallpaper），从列表移除并清理该服务器、该路径的本地缓存；若移除的是当前壁纸，则恢复主题默认壁纸，移除其他图片时保留当前选择。该功能不会删除服务器原图。内置壁纸和 Themes 预览使用单独打包的 320×180 WebP 缩略图；更新原图后可运行 `python tools/generate_wallpaper_thumbnails.py` 重新生成（需要 Pillow）。专项验证：`python tools/wallpaper_cache_smoke.py`。
+
 ## 文件冲突
 
 文件管理底部的 **Transfers** 队列显示每项上传／下载的进度条、百分比、已处理／总大小、实时速度、耗时及预计剩余时间。速度采用最近约 3 秒的实际文件内容传输量计算（B/s、KiB/s、MiB/s），不包含 SSH/SFTP 协议开销，也不等同于服务器网卡总流量；等待用户处理冲突时暂停计速，持续无数据时速度回落为零。速度尚未稳定或正在扫描目录时，剩余时间显示 `—`。
@@ -271,6 +279,17 @@ Docker 窗口左侧为分区栏（容器、卷、端口、项目、容器镜像�
 重启策略和 CPU／内存限制使用 [Docker container update](https://docs.docker.com/reference/cli/docker/container/update/)，只修改当前容器，不改写 Compose 定义；端口和挂载变更需要重建容器。卷详情使用 [volume inspect](https://docs.docker.com/reference/cli/docker/volume/inspect/)，日志使用 [container logs](https://docs.docker.com/reference/cli/docker/container/logs/) 的有限尾部读取。标准输出与错误输出在服务器端合并到同一管道，按 Docker 写出的顺序显示；日志正文中的无效 UTF-8 显示为替换字符，不会使读取失败。
 
 桌面外观独立于客户端设置。“跟随应用”沿用客户端主题，亮／暗选择作用于 Desktop 及其对话框。远端 `~/.arcnix/desktop` 下的 `system.json`、`preferences/` 和 `apps/` 保存分域的 v1 JSON，通过 SSH 读写。首次保存、旧版 `desktop.json` 迁移和同次修改涉及多个文件时，生成一个配置目录并原子切换 `desktop` 链接。单文件修改只上传该文件，在锁内校验读到的配置版本，再原子替换目标文件。单文件保存之间共用当前代目录，上一代对应上次整套发布。并发修改触发重新读取和三方合并，同字段发生冲突时由用户选择。
+
+Linux SSH 桌面按数据的共享范围和用途选择目录。桌面配置的文件名由 [desktop_storage.rs](../crates/arcnix-core/src/desktop/desktop_storage.rs) 声明；Cookie 的位置由 [sync.rs](../crates/arcnix-core/src/desktop/sync.rs) 单独声明。
+
+| 数据 | 位置 | 用途 |
+| --- | --- | --- |
+| 桌面公共设置 | `~/.arcnix/desktop/system.json`、`~/.arcnix/desktop/preferences/desktop.json` | 前者保存语言、时钟和快捷键等系统设置，后者保存桌面布局、主题和壁纸路径。 |
+| 应用偏好与窗口状态 | `~/.arcnix/desktop/apps/<应用标识>.json` | 随同一 SSH 账户的桌面配置同步。例如 `browser.json` 保存浏览器书签和窗口状态。 |
+| 每个客户端独立的浏览器数据 | `~/.arcnix/browser/profiles/<客户端 ID>/cookies.enc` | 保存加密 Cookie，独立于桌面配置同步。同目录的 `.arcnix-sync.lock` 用于协调读写。 |
+| 可重新生成的壁纸缓存 | 客户端 `config.json` 旁的 `wallpaper-cache/` | 按服务器和源文件路径缓存原图、缩略图。桌面配置引用服务器图片路径。 |
+
+`~/.arcnix/desktop` 是当前配置入口，指向 `desktop-revisions/generation.*/` 中生效的那一代目录。
 
 **Desktop** 将图标流向、起始方向、大小及主文件夹和回收站开关保存在 `preferences/desktop.json` 的 `layout`。在 **Settings → Dock** 可设置 Dock 的位置、样式、图标大小、时钟及固定快捷方式。右键 Dock 中的 Settings 图标可以直达 Dock 设置。文件类应用的 Dock 菜单列出已打开的窗口或文档，选中条目即可恢复对应窗口。「应用窗口总览」默认开启。单击后台应用的 Dock 图标会切换到该应用；单击当前活跃应用的 Dock 图标，可平铺该应用的所有窗口，包括最小化窗口。点选窗口或用方向键和 Enter 选择；按 Esc、点空白处或关闭按钮可退出。窗口保留原有大小和位置。Dock 设置保存在 `apps/dock.json`。从同一 SSH 桌面的 Files 拖到桌面时，默认或按 Shift 移动，Ctrl 复制，Alt 或 Ctrl+Shift 在远端 `Desktop` 目录创建符号链接。复制和移动继续使用 Files 的文件操作及冲突处理。
 

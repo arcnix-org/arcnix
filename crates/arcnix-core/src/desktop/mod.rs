@@ -8,4 +8,5 @@ pub mod device_info;
 pub mod server_apps;
 pub mod settings_capabilities;
 pub mod sync;
+pub mod wallpaper_cache;
 mod windows_sync;

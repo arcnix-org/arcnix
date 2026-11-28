@@ -116,7 +116,7 @@ def main():
             assert all(bookmark in remote()['browser_bookmarks'] for bookmark in long_bookmarks)
             directory = desktop_settings_dir(shared)
             assert (directory / 'system.json').read_text(encoding='utf-8').startswith('{\n  "version": 1,\n')
-            assert (directory / 'apps/web_browser.json').stat().st_size > 64 * 1024
+            assert (directory / 'apps/browser.json').stat().st_size > 64 * 1024
             assert json.loads(shared.read_bytes())['theme'] == 'System'
 
             # Save an edit while SSH is unavailable, and exit before it can be acknowledged.

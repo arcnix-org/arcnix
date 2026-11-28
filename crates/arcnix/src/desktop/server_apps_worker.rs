@@ -21,6 +21,8 @@ pub enum Action {
     FileLocations,
     FileItem(String),
     ReadImage(String),
+    ReadWallpaper(arcnix_core::wallpaper_cache::Request),
+    RemoveWallpaperCache(arcnix_core::wallpaper_cache::Request),
     PickerEntries(Vec<String>),
     PickerTrash,
     CheckDesktopPaths(Vec<String>),
@@ -105,6 +107,8 @@ pub enum Reply {
     FileLocations(Vec<arcnix_core::remote::FileLocation>),
     FileItem(arcnix_core::permissions::Metadata),
     Image(crate::image_viewer::Picture),
+    Wallpaper(arcnix_core::wallpaper_cache::Cached),
+    WallpaperRemoved,
     PickerEntries(Vec<arcnix_core::FileEntry>),
     MissingDesktopPaths {
         paths: Vec<String>,
@@ -171,6 +175,11 @@ pub fn handle(session: &RemoteSession, action: Action) -> anyhow::Result<Reply> 
         Action::ReadTimeZone => Reply::TimeZone(session.read_system_time_zone()?),
         Action::SetTimeZone(zone) => Reply::TimeZone(session.change_system_time_zone(&zone)?),
         Action::FileLocations => Reply::FileLocations(session.file_locations()?),
+        Action::RemoveWallpaperCache(request) => {
+            request.remove_cached()?;
+            Reply::WallpaperRemoved
+        }
+        Action::ReadWallpaper(request) => Reply::Wallpaper(request.remote(session)?),
         Action::ReadImage(path) => {
             Reply::Image(desktop_customization::read_wallpaper(session, &path)?.into())
         }

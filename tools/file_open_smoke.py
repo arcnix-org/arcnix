@@ -208,7 +208,7 @@ def main():
             expect(extension_row('html').locator('.file-association-other-apps')).to_contain_text('Browser')
             search_extensions('legacyopen')
             extension_row('legacyopen').click()
-            association.get_by_role('button', name='Reset', exact=True).click()
+            association.get_by_role('button', name='Restore default app for this file type', exact=True).click()
             eventually(lambda: associations().get('legacyopen') == {'added_apps': ['code']})
             association.get_by_role('button', name='Done', exact=True).click()
 
@@ -302,7 +302,7 @@ def main():
             expect(extension_row('reportdoc').locator('.file-association-current')).to_have_text('Ask which app to use')
             search_extensions('html')
             extension_row('html').click()
-            association.get_by_role('button', name='Reset', exact=True).click()
+            association.get_by_role('button', name='Restore default app for this file type', exact=True).click()
             eventually(lambda: 'default' not in associations().get('html', {}))
             association.get_by_role('button', name='Done', exact=True).click()
             expect(extension_row('html').locator('.file-association-current')).to_have_text('Browser')

@@ -74,10 +74,14 @@ fn edit(ui: &Ui, change: impl FnOnce(&mut Appearance)) {
 }
 
 fn select_preset(ui: &Ui, preset: Preset) {
+    ui.state
+        .revise(|s| s.server_apps.wallpapers.selecting = None);
     update(ui, |prefs| prefs.apply_theme_preset(preset));
 }
 
 pub(crate) fn set_background(ui: &Ui, wallpaper: Option<Wallpaper>) {
+    ui.state
+        .revise(|s| s.server_apps.wallpapers.selecting = None);
     edit(ui, |prefs| {
         prefs.wallpaper = wallpaper;
         prefs.overrides.wallpaper = None;
@@ -231,7 +235,8 @@ fn thumbnail(preset: Preset) -> impl Widget {
     };
     let (light, dark) = (preview(false), preview(true));
     let split = light != dark;
-    let swatch = |class: &str| col().class(format!("theme-wallpaper-swatch {class}"));
+    let swatch =
+        |class: &str| col().class(format!("theme-wallpaper-swatch wallpaper-preview {class}"));
     row().class("theme-thumbnail").fill((
         swatch(light),
         when(split, move || swatch(dark)),
@@ -247,8 +252,8 @@ fn thumbnail(preset: Preset) -> impl Widget {
 pub(crate) fn controls(ui: Ui) -> impl Widget {
     let state = ui.state;
     let ready = state.map(choices_ready);
-    let theme_reset = ui.clone();
-    let style_reset = ui.clone();
+    let restore_theme = ui.clone();
+    let restore_colors = ui.clone();
     col()
         .class("desktop-settings-pane desktop-appearance")
         .fill((
@@ -256,8 +261,8 @@ pub(crate) fn controls(ui: Ui) -> impl Widget {
                 settings::section_heading(
                     "Themes",
                     true,
-                    settings::reset_button(true, move || {
-                        select_preset(&theme_reset, Preset::default());
+                    settings::restore_button(true, "Restore default theme", move || {
+                        select_preset(&restore_theme, Preset::default());
                     })
                     .enabled(ready),
                 ),
@@ -289,8 +294,8 @@ pub(crate) fn controls(ui: Ui) -> impl Widget {
                     settings::section_heading(
                         "Colors",
                         true,
-                        settings::reset_button(true, move || {
-                            edit(&style_reset, |prefs| {
+                        settings::restore_button(true, "Restore theme colors", move || {
+                            edit(&restore_colors, |prefs| {
                                 let overrides = &mut prefs.overrides;
                                 overrides.mode = None;
                                 overrides.accent = None;
@@ -326,15 +331,15 @@ pub(crate) fn controls(ui: Ui) -> impl Widget {
 
 fn icon_controls(ui: Ui) -> impl Widget {
     let state = ui.state;
-    let reset = ui.clone();
+    let restore = ui.clone();
     col()
         .class("desktop-settings-card desktop-settings-rows appearance-icon-settings")
         .fill((
             settings::section_heading(
                 "Icons",
                 true,
-                settings::reset_button(true, move || {
-                    edit(&reset, |prefs| {
+                settings::restore_button(true, "Restore theme icons", move || {
+                    edit(&restore, |prefs| {
                         prefs.overrides.icon_family = None;
                         prefs.overrides.icons = None;
                     });

@@ -211,7 +211,7 @@ def main():
             expect(page.locator('.local-slot .column-size')).to_have_count(0)
             dialog = columns('.remote-slot')
             dialog.get_by_role('checkbox', name='Type', exact=True).check()
-            dialog.get_by_role('button', name='Reset', exact=True).click()
+            dialog.get_by_role('button', name='Restore default columns', exact=True).click()
             dialog.get_by_role('button', name='Done', exact=True).click()
             expect(page.locator('.remote-slot .column-type')).to_have_count(0)
             page.set_viewport_size(dict(width=1000, height=700))

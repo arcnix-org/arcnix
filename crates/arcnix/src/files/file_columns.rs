@@ -53,13 +53,13 @@ pub(crate) fn dialog(ui: Ui) -> impl Widget {
             let remote =
                 state.with(|s| matches!(s.dialog, Some(Dialog::FileColumns { remote: true })));
             let desktop = state.with(server_desktop::owns_dialog);
-            let reset = ui.clone();
+            let restore = ui.clone();
             let close = ui.clone();
             modal_with_header(
                 ui.clone(),
                 "显示列",
-                settings::reset_button(desktop, move || {
-                    files_view::change(&reset, remote, |v| v.columns = None)
+                settings::restore_button(desktop, "Restore default columns", move || {
+                    files_view::change(&restore, remote, |v| v.columns = None)
                 }),
                 col().class("column-settings").fill((
                     text().class("subtle").content(state.map(move |s| {

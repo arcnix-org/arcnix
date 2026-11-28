@@ -214,7 +214,7 @@ fn remote_preferences_are_atomic_private_and_docker_uses_bounded_local_commands(
         let active_generation = || run(&format!("readlink -- {}", q(&config)));
         let generation = active_generation()?;
         let files_path = format!("{config}/apps/files.json");
-        let unrelated = format!("{config}/apps/web_browser.json");
+        let unrelated = format!("{config}/apps/browser.json");
         run(&format!("printf '\\n' >> {}", q(&unrelated)))?;
         let file_identity = |path: &str| run(&format!("stat -c '%i %y' -- {}", q(path)));
         let unchanged_browser = file_identity(&unrelated)?;

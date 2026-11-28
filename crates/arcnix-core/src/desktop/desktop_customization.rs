@@ -6,7 +6,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::FileEntry;
 use crate::desktop_theme::{
-    CustomTheme, Overrides, Preset, Themes, appearance_value, built_in_wallpaper,
+    CustomTheme, Overrides, Preset, Themes, appearance_value, wallpaper_value,
 };
 use crate::remote::RemoteSession;
 use crate::server_apps::DesktopApp;
@@ -328,8 +328,10 @@ pub struct Appearance {
     #[serde(deserialize_with = "appearance_value")]
     pub theme: Option<Preset>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "built_in_wallpaper")]
+    #[serde(deserialize_with = "wallpaper_value")]
     pub wallpaper: Option<Wallpaper>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub wallpapers: Vec<String>,
     #[serde(skip_serializing_if = "Overrides::is_default")]
     pub overrides: Box<Overrides>,
     #[serde(skip_serializing_if = "Themes::is_default")]
@@ -349,6 +351,7 @@ impl Default for Appearance {
             extra_shortcuts: vec![],
             theme: None,
             wallpaper: None,
+            wallpapers: Vec::new(),
             overrides: Box::default(),
             themes: Box::default(),
             layout: Layout::default(),
@@ -441,6 +444,17 @@ impl Appearance {
         );
         if let Some(Wallpaper::Remote(path)) = &self.wallpaper {
             validate_image_path(path)?;
+        }
+        ensure!(
+            self.wallpapers.len() <= 32 && unique(&self.wallpapers),
+            "Too many or duplicate wallpapers"
+        );
+        for path in &self.wallpapers {
+            validate_image_path(path)?;
+            ensure!(
+                crate::wallpaper_cache::supports(path),
+                "Unsupported wallpaper format"
+            );
         }
         self.overrides.validate()?;
         self.themes.validate()?;

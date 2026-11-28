@@ -59,6 +59,7 @@ icons! {
     Up => "arrow-up" as "up";
     Go => "arrow-right" as "go";
     Refresh => "refresh";
+    RestoreDefaults => "restore-defaults";
     Power => "power";
     Save => "save";
     Filter => "filter";

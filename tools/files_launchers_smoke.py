@@ -190,7 +190,7 @@ def main():
             keys = ('launcher_locations', 'launcher_power')
             eventually(lambda: all(dock_preferences().get(key) is False for key in keys))
             launcher_card = settings.locator('.desktop-settings-card').filter(has=page.get_by_text('Launcher', exact=True))
-            launcher_card.get_by_role('button', name='Reset', exact=True).click()
+            launcher_card.get_by_role('button', name='Restore launcher defaults', exact=True).click()
             expect(launcher_locations).to_be_checked()
             expect(launcher_power).to_be_checked()
             catalog = app.apps()

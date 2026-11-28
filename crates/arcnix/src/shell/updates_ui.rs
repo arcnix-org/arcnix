@@ -440,11 +440,11 @@ fn status(s: &State) -> &'static str {
     }
 }
 pub(crate) fn panel(ui: Ui) -> impl Widget {
-    settings::panel_with_reset(
+    settings::panel_with_action(
         &ui,
         navigation::SettingsSection::Updates,
         "Updates",
-        settings::local_reset(&ui, false, |s, defaults| {
+        settings::restore_local_defaults(&ui, false, "Restore update defaults", |s, defaults| {
             let last_check = s.updates.last_check;
             s.updates = defaults.updates.clone();
             s.updates.last_check = last_check;

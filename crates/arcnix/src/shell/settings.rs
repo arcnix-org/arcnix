@@ -107,13 +107,16 @@ where
         .fill(icons::glyph(Icon::Collapse))
 }
 
-pub(crate) fn reset_button(desktop: bool, reset: impl FnMut() + 'static) -> sapid::Button {
-    let label = i18n::bind_in(desktop, "Reset");
+pub(crate) fn restore_button(
+    desktop: bool,
+    label: impl Into<Vary<String>>,
+    restore: impl FnMut() + 'static,
+) -> sapid::Button {
     sapid::button()
-        .class("button with-icon settings-reset")
-        .name(label.clone())
-        .fill((icons::glyph(Icon::Refresh), text().content(label)))
-        .on_press(reset)
+        .class("button icon-button settings-restore")
+        .name(i18n::bind_in(desktop, label))
+        .fill(icons::glyph(Icon::RestoreDefaults))
+        .on_press(restore)
 }
 
 pub(crate) fn section_heading(
@@ -135,26 +138,28 @@ pub(crate) fn section_heading(
         .fill(actions)
 }
 
-pub(crate) fn local_reset(
+pub(crate) fn restore_local_defaults(
     ui: &Ui,
     desktop: bool,
-    reset: fn(&mut AppSettings, AppSettings),
+    label: &'static str,
+    restore: fn(&mut AppSettings, AppSettings),
 ) -> sapid::Button {
     let ui = ui.clone();
-    reset_button(desktop, move || {
-        ui.update_preferences(|settings| reset(settings, AppSettings::default()))
+    restore_button(desktop, label, move || {
+        ui.update_preferences(|settings| restore(settings, AppSettings::default()))
     })
 }
 
-pub(crate) fn desktop_reset(
+pub(crate) fn restore_desktop_defaults(
     ui: &Ui,
-    reset: impl Fn(&mut arcnix_core::server_apps::DesktopPreferences) + 'static,
+    label: &'static str,
+    restore: impl Fn(&mut arcnix_core::server_apps::DesktopPreferences) + 'static,
 ) -> sapid::Button {
     let ui = ui.clone();
     let state = ui.state;
-    reset_button(true, move || {
+    restore_button(true, label, move || {
         let mut prefs = state.with(server_apps_ui::desired);
-        reset(&mut prefs);
+        restore(&mut prefs);
         if state.with(|s| server_apps_ui::current(s) != &prefs) {
             ui.queue_desktop_preferences(prefs);
         }
@@ -268,10 +273,15 @@ pub(crate) fn files_dialog(ui: Ui) -> impl Widget {
             modal_with_header(
                 ui.clone(),
                 "Settings",
-                local_reset(&ui, desktop, |s, defaults| {
-                    s.show_hidden_files = defaults.show_hidden_files;
-                    s.folder_defaults = defaults.folder_defaults;
-                }),
+                restore_local_defaults(
+                    &ui,
+                    desktop,
+                    "Restore file view defaults",
+                    |s, defaults| {
+                        s.show_hidden_files = defaults.show_hidden_files;
+                        s.folder_defaults = defaults.folder_defaults;
+                    },
+                ),
                 (
                     files_view::defaults(&ui, desktop),
                     row()
@@ -301,7 +311,7 @@ fn section(
     category: navigation::SettingsSection,
     title: &'static str,
     description: &'static str,
-    reset: sapid::Button,
+    restore: sapid::Button,
     controls: impl IntoChildren + 'static,
 ) -> impl Widget {
     col()
@@ -317,7 +327,7 @@ fn section(
             section_heading(
                 title,
                 false,
-                (crate::help_ui::tip(title, description), reset),
+                (crate::help_ui::tip(title, description), restore),
             ),
             col()
                 .class("settings-field")
@@ -343,7 +353,7 @@ pub(crate) fn language_choices(ui: &Ui) -> impl Widget + use<> {
 pub(crate) fn page(ui: Ui) -> impl Widget {
     let state = ui.state;
     let debug = ui.clone();
-    let reset_debug = ui.clone();
+    let restore_diagnostics = ui.clone();
     let writable = ui.writable;
     col().class("settings-page").fill((
         feedback(
@@ -357,7 +367,7 @@ pub(crate) fn page(ui: Ui) -> impl Widget {
                 navigation::SettingsSection::General,
                 "Language",
                 "Choose the language used throughout the application.",
-                local_reset(&ui, false, |s, defaults| s.language = defaults.language),
+                restore_local_defaults(&ui, false, "Restore default language", |s, defaults| s.language = defaults.language),
                 language_choices(&ui),
             ),
             section(
@@ -365,7 +375,7 @@ pub(crate) fn page(ui: Ui) -> impl Widget {
                 navigation::SettingsSection::General,
                 "Theme",
                 "Choose a color theme.",
-                local_reset(&ui, false, |s, defaults| s.theme = defaults.theme),
+                restore_local_defaults(&ui, false, "Restore default theme", |s, defaults| s.theme = defaults.theme),
                 select(
                     &ui,
                     false,
@@ -385,7 +395,7 @@ pub(crate) fn page(ui: Ui) -> impl Widget {
                 navigation::SettingsSection::General,
                 "Diagnostics",
                 "Show technical details when configuration settings are repaired or cannot be loaded.",
-                reset_button(false, move || reset_debug.change_debug_mode(false)),
+                restore_button(false, "Turn off diagnostics", move || restore_diagnostics.change_debug_mode(false)),
                 sapid::switch()
                     .size(sapid::Size::Small)
                     .label_position(sapid::SwitchLabelPosition::Before)
@@ -400,7 +410,7 @@ pub(crate) fn page(ui: Ui) -> impl Widget {
                 navigation::SettingsSection::Files,
                 "Hidden files",
                 "Show hidden items across all folders, including dotfiles and local Windows items with the Hidden attribute.",
-                local_reset(&ui, false, |s, defaults| {
+                restore_local_defaults(&ui, false, "Restore hidden file defaults", |s, defaults| {
                     s.show_hidden_files = defaults.show_hidden_files
                 }),
                 hidden_files_switch(&ui, false),
@@ -411,7 +421,7 @@ pub(crate) fn page(ui: Ui) -> impl Widget {
                 navigation::SettingsSection::Files,
                 "Default apps",
                 "Manage default and alternative apps for remote file extensions.",
-                file_open::reset_settings(&ui, false),
+                file_open::restore_file_associations(&ui, false),
                 file_open::settings(ui.clone(), false),
             ),
             preferences_ui::transfers(ui.clone()),
@@ -420,7 +430,7 @@ pub(crate) fn page(ui: Ui) -> impl Widget {
                 navigation::SettingsSection::Monitoring,
                 "Resource refresh interval",
                 "Default resource refresh interval for server desktops.",
-                local_reset(&ui, false, |s, defaults| {
+                restore_local_defaults(&ui, false, "Restore default refresh interval", |s, defaults| {
                     s.resource_interval_seconds = defaults.resource_interval_seconds
                 }),
                 select(
@@ -518,14 +528,14 @@ pub(crate) fn panel<B: Widget + 'static>(
     title: &'static str,
     body: B,
 ) -> impl Widget + use<B> {
-    panel_with_reset(ui, category, title, (), body)
+    panel_with_action(ui, category, title, (), body)
 }
 
-pub(crate) fn panel_with_reset<B: Widget + 'static, R: IntoChildren>(
+pub(crate) fn panel_with_action<B: Widget + 'static, R: IntoChildren>(
     ui: &Ui,
     category: navigation::SettingsSection,
     title: &'static str,
-    reset: R,
+    action: R,
     body: B,
 ) -> impl Widget + use<B, R> {
     col()
@@ -537,5 +547,5 @@ pub(crate) fn panel_with_reset<B: Widget + 'static, R: IntoChildren>(
             }
             .to_owned()
         }))
-        .fill((section_heading(title, false, reset), body))
+        .fill((section_heading(title, false, action), body))
 }

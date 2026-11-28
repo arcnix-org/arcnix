@@ -2523,6 +2523,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             polling.observability_tick();
             polling.tick_desktop_clock();
             polling.tick_desktop_sync();
+            wallpaper_ui::tick(&polling);
             #[cfg(windows)]
             browser_cookies::tick(&polling);
             polling.transfer_tick();
@@ -2558,9 +2559,14 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                     },
                 )
             })
+            .chain(arcnix_core::desktop_theme::BUNDLED_WALLPAPER_THUMBNAILS.iter().map(|(name, bytes)| (
+                format!("/wallpapers/thumbnails/{name}.webp"),
+                glory::wry::shell::Asset { mime: "image/webp".into(), bytes: bytes.to_vec() },
+            )))
             .collect(),
             asset_provider: Some(Arc::new(video_player::Assets {
                 player: ui.player.source.clone(),
+                wallpapers: wallpaper_ui::cache_root(&ui),
             })),
             initialization_script: Some(
                 [

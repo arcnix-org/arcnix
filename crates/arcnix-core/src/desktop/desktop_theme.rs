@@ -85,11 +85,14 @@ pub(crate) fn appearance_value<'de, D: Deserializer<'de>, T: DeserializeOwned + 
     Ok(serde_json::from_value(value).unwrap_or_default())
 }
 
-pub(crate) fn built_in_wallpaper<'de, D: Deserializer<'de>>(
+pub(crate) fn wallpaper_value<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Option<Wallpaper>, D::Error> {
     let wallpaper: Option<Wallpaper> = appearance_value(deserializer)?;
-    Ok(wallpaper.filter(|wallpaper| !matches!(wallpaper, Wallpaper::Remote(_))))
+    Ok(wallpaper.filter(|wallpaper| match wallpaper {
+        Wallpaper::Remote(path) => validate_image_path(path).is_ok(),
+        _ => true,
+    }))
 }
 
 fn appearance_colors<'de, D: Deserializer<'de>>(
@@ -528,7 +531,7 @@ impl Theme {
 #[serde(default)]
 pub struct StyleOverrides {
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "built_in_wallpaper")]
+    #[serde(deserialize_with = "wallpaper_value")]
     pub wallpaper: Option<Wallpaper>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(deserialize_with = "appearance_value")]
@@ -548,7 +551,7 @@ impl StyleOverrides {
 #[serde(default)]
 pub struct Overrides {
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "built_in_wallpaper")]
+    #[serde(deserialize_with = "wallpaper_value")]
     pub wallpaper: Option<Wallpaper>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(deserialize_with = "appearance_value")]
@@ -705,6 +708,75 @@ impl Themes {
         Ok(())
     }
 }
+
+/// Gallery-only 320 by 180 previews; desktop backgrounds retain their full-size assets.
+#[cfg(feature = "bundled-wallpapers")]
+pub const BUNDLED_WALLPAPER_THUMBNAILS: &[(&str, &[u8])] = &[
+    (
+        "aurora-night",
+        include_bytes!("../../assets/wallpapers/thumbnails/aurora-night.webp"),
+    ),
+    (
+        "aurora-twilight",
+        include_bytes!("../../assets/wallpapers/thumbnails/aurora-twilight.webp"),
+    ),
+    (
+        "clay-dark",
+        include_bytes!("../../assets/wallpapers/thumbnails/clay-dark.webp"),
+    ),
+    (
+        "clay-light",
+        include_bytes!("../../assets/wallpapers/thumbnails/clay-light.webp"),
+    ),
+    (
+        "fjord-daylight",
+        include_bytes!("../../assets/wallpapers/thumbnails/fjord-daylight.webp"),
+    ),
+    (
+        "fjord",
+        include_bytes!("../../assets/wallpapers/thumbnails/fjord.webp"),
+    ),
+    (
+        "meadow-dark",
+        include_bytes!("../../assets/wallpapers/thumbnails/meadow-dark.webp"),
+    ),
+    (
+        "meadow-light",
+        include_bytes!("../../assets/wallpapers/thumbnails/meadow-light.webp"),
+    ),
+    (
+        "prism-dark",
+        include_bytes!("../../assets/wallpapers/thumbnails/prism-dark.webp"),
+    ),
+    (
+        "prism-light",
+        include_bytes!("../../assets/wallpapers/thumbnails/prism-light.webp"),
+    ),
+    (
+        "seaside-moonrise",
+        include_bytes!("../../assets/wallpapers/thumbnails/seaside-moonrise.webp"),
+    ),
+    (
+        "seaside-sunrise",
+        include_bytes!("../../assets/wallpapers/thumbnails/seaside-sunrise.webp"),
+    ),
+    (
+        "tide-dark",
+        include_bytes!("../../assets/wallpapers/thumbnails/tide-dark.webp"),
+    ),
+    (
+        "tide-light",
+        include_bytes!("../../assets/wallpapers/thumbnails/tide-light.webp"),
+    ),
+    (
+        "valley-dark",
+        include_bytes!("../../assets/wallpapers/thumbnails/valley-dark.webp"),
+    ),
+    (
+        "valley-light",
+        include_bytes!("../../assets/wallpapers/thumbnails/valley-light.webp"),
+    ),
+];
 
 #[cfg(test)]
 mod tests {
@@ -927,7 +999,10 @@ mod tests {
             crate::desktop_customization::Layout::default().icon_pixels()
         );
         let theme = prefs.appearance.theme_settings(prefs.theme).resolve();
-        assert_eq!(theme.background(true), &Wallpaper::Prism);
+        assert_eq!(
+            theme.background(true),
+            &Wallpaper::Remote("/home/demo/removed.png".into())
+        );
         assert_eq!(theme.icon_family, IconFamily::Line);
         assert_eq!(theme.icons, IconStyle::Outline);
         assert_eq!(theme.mode, Mode::Dark);

@@ -43,6 +43,7 @@ pub(crate) struct DesktopState {
     pub files_search: files_search::Search,
     pub files_cleanup: files_ui::Cleanup,
     pub customization: desktop_customization_ui::Runtime,
+    pub wallpapers: wallpaper_ui::Runtime,
     pub network: network_ui::Runtime,
     pub processes: processes_ui::Runtime,
     pub shortcut_error: String,
@@ -383,6 +384,10 @@ pub(crate) fn event(ui: &Ui, serial: u64, result: std::result::Result<Reply, Str
         }
         return;
     }
+    if wallpaper_ui::pending(ui, serial) {
+        wallpaper_ui::received(ui, result);
+        return;
+    }
     if ui.state.with(|s| s.images.request == Some(serial)) {
         image_viewer::received(ui, serial, result);
         return;
@@ -664,7 +669,7 @@ pub(crate) fn settings(ui: Ui) -> impl Widget {
                     SettingsPage::DefaultApps => fragment(
                         col().class("desktop-settings-pane").fill(
                             col().class("desktop-settings-card").fill((
-                                settings::section_heading("Default apps", true, file_open::reset_settings(&ui, true)),
+                                settings::section_heading("Default apps", true, file_open::restore_file_associations(&ui, true)),
                                 text().class("subtle").content(i18n::bind(
                                     "Manage default and alternative apps for remote file extensions.",
                                 )),
@@ -764,7 +769,7 @@ fn general_settings(ui: Ui) -> impl Widget {
       col().class("desktop-settings-card").fill((
         settings::section_heading("Resource refresh interval", true, (
             help_ui::tip("Resource refresh interval", "This server uses the application default until you select an interval here. Sampling runs while the resource views in Monitor are open."),
-            settings::desktop_reset(&ui, |prefs| prefs.resource_interval_seconds = None),
+            settings::restore_desktop_defaults(&ui, "Use application refresh interval", |prefs| prefs.resource_interval_seconds = None),
         )),
         settings::select(&ui, true, "Resource refresh interval",
             std::iter::once((None, "Follow application".to_string())).chain(

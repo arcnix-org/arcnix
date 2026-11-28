@@ -1298,6 +1298,21 @@ ARCNIX_METRICS_END
                     channel.close()
                     return
                 channel.send_exit_status(0)
+            elif text.startswith("# arcnix:wallpaper:sha256\n"):
+                # Emulate the fixed read-only hash helper inside the owned fixture root.
+                path = shlex.split(text.split('\n', 1)[1])[-1]
+                source = self.fixture_root / path.lstrip('/')
+                if (self.fixture_root / 'wallpaper-no-hash-helper').exists():
+                    channel.send_exit_status(127)
+                elif (source.resolve().is_relative_to(self.fixture_root.resolve())
+                        and not source.is_symlink() and source.is_file()
+                        and 0 < source.stat().st_size <= 8 * 1024 * 1024):
+                    with (self.fixture_root / 'wallpaper-hashes.log').open('a') as trace:
+                        trace.write(path + '\n')
+                    channel.sendall((hashlib.sha256(source.read_bytes()).hexdigest() + '\n').encode())
+                    channel.send_exit_status(0)
+                else:
+                    channel.send_exit_status(1)
             elif text.strip() == "fixture-output":
                 channel.sendall(b"fixture stdout\n")
                 channel.sendall_stderr(b"fixture stderr\n")

@@ -9,7 +9,7 @@ use crate::desktop_customization::{
     Appearance, Dock, Layout, Shortcut, Wallpaper, known_apps, known_shortcuts,
 };
 use crate::desktop_shortcuts::Shortcuts;
-use crate::desktop_theme::{Overrides, Preset, Themes, appearance_value, built_in_wallpaper};
+use crate::desktop_theme::{Overrides, Preset, Themes, appearance_value, wallpaper_value};
 use crate::server_apps::{
     DesktopApp as App, DesktopClock, DesktopPreferences, DesktopWindow, EditorSettings,
     FilesPreferences, PlayerSettings, TerminalAppearance, TerminalLayout,
@@ -93,8 +93,10 @@ struct Shell {
     #[serde(deserialize_with = "appearance_value")]
     theme: Option<Preset>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "built_in_wallpaper")]
+    #[serde(deserialize_with = "wallpaper_value")]
     wallpaper: Option<Wallpaper>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    wallpapers: Vec<String>,
     #[serde(skip_serializing_if = "Overrides::is_default")]
     overrides: Box<Overrides>,
     #[serde(skip_serializing_if = "Themes::is_default")]
@@ -113,6 +115,7 @@ impl From<&Appearance> for Shell {
             extra_shortcuts: value.extra_shortcuts.clone(),
             theme: value.theme,
             wallpaper: value.wallpaper.clone(),
+            wallpapers: value.wallpapers.clone(),
             overrides: value.overrides.clone(),
             themes: value.themes.clone(),
             layout: value.layout,
@@ -195,7 +198,7 @@ impl Domain {
             Self::Shell => "preferences/desktop.json",
             Self::Dock => "apps/dock.json",
             Self::Files => "apps/files.json",
-            Self::Browser => "apps/web_browser.json",
+            Self::Browser => "apps/browser.json",
             Self::Terminal => "apps/terminal.json",
             Self::Monitor => "apps/monitor.json",
             Self::Editor => "apps/text_editor.json",
@@ -281,6 +284,7 @@ impl Domain {
                     extra_shortcuts,
                     theme,
                     wallpaper,
+                    wallpapers,
                     overrides,
                     themes,
                     layout,
@@ -292,6 +296,7 @@ impl Domain {
                 prefs.appearance.extra_shortcuts = extra_shortcuts;
                 prefs.appearance.theme = theme;
                 prefs.appearance.wallpaper = wallpaper;
+                prefs.appearance.wallpapers = wallpapers;
                 prefs.appearance.overrides = overrides;
                 prefs.appearance.themes = themes;
                 prefs.appearance.layout = layout;

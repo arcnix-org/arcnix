@@ -369,7 +369,7 @@ def main():
             app.action('Customize folder…')
             restored = p.get_by_role('dialog', name='Customize folder', exact=True)
             assert same(restored.bounding_box(), original_dialog)
-            restored.get_by_role('button', name='Reset', exact=True).click()
+            restored.get_by_role('button', name='Restore default folder icon', exact=True).click()
             restored.get_by_role('button', name='Done', exact=True).click()
             expect(p.locator(f'.file-row[aria-label="{desktop_path}"] .glyph-folder')).to_be_visible()
             eventually(lambda: 'folder_icons' not in prefs()['files'])

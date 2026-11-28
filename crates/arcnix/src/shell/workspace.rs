@@ -754,88 +754,199 @@ fn direction_label(direction: TransferDirection) -> &'static str {
     }
 }
 
-fn direction_progress(s: &State, direction: TransferDirection) -> (usize, f32) {
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+enum TransferPhase {
+    #[default]
+    Empty,
+    Preparing,
+    Running,
+    Paused,
+    Conflict,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+impl TransferPhase {
+    fn class(self) -> &'static str {
+        match self {
+            Self::Empty => "hidden",
+            Self::Preparing => "preparing",
+            Self::Running => "running",
+            Self::Paused => "paused",
+            Self::Conflict => "conflict",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Empty | Self::Running => "",
+            Self::Preparing => "正在准备传输…",
+            Self::Paused => "已暂停",
+            Self::Conflict => "等待文件冲突处理",
+            Self::Completed => "已完成",
+            Self::Failed => "执行失败",
+            Self::Cancelled => "已取消",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+struct TransferIndicator {
+    phase: TransferPhase,
+    active: usize,
+    percent: Option<u8>,
+}
+
+fn direction_progress(s: &State, direction: TransferDirection) -> TransferIndicator {
     let jobs = s
         .jobs
         .iter()
         .filter(|job| queue_job_visible(s, job, Some(direction)));
-    let mut active_jobs = jobs.clone().filter(|job| active_job(job)).peekable();
-    let active = active_jobs.peek().is_some();
-    let active_batches: HashSet<_> = active_jobs
+    let Some(latest) = jobs.clone().next_back() else {
+        return TransferIndicator::default();
+    };
+    let active_jobs = jobs.clone().filter(|job| active_job(job));
+    let active = active_jobs.clone().count();
+    if active == 0 {
+        let latest_batch = s.batch_ids.get(&latest.id);
+        let mut phase = TransferPhase::Completed;
+        for job in jobs.filter(|job| {
+            job.id == latest.id
+                || (latest_batch.is_some() && s.batch_ids.get(&job.id) == latest_batch)
+        }) {
+            match job.status {
+                TransferStatus::Failed(_) => {
+                    phase = TransferPhase::Failed;
+                    break;
+                }
+                TransferStatus::Cancelled => phase = TransferPhase::Cancelled,
+                _ => {}
+            }
+        }
+        return TransferIndicator {
+            phase,
+            ..Default::default()
+        };
+    }
+    let batches: HashSet<_> = active_jobs
         .filter_map(|job| s.batch_ids.get(&job.id))
         .collect();
-    let latest_batch = jobs
-        .clone()
-        .next_back()
-        .and_then(|job| s.batch_ids.get(&job.id));
-    let mut count = 0;
     let mut total = 0u128;
     let mut done = 0u128;
-    let mut completed = true;
-    for job in jobs.filter(|job| {
-        if active {
-            active_job(job)
-                || (job.status == TransferStatus::Completed
-                    && s.batch_ids
-                        .get(&job.id)
-                        .is_some_and(|batch| active_batches.contains(batch)))
+    let mut unknown = false;
+    let mut progressing = false;
+    let mut queued = false;
+    let mut conflict = false;
+    for job in jobs {
+        if active_job(job) {
+            unknown |= job.total_bytes == 0;
+            if !transfer_paused(s, &job.id) {
+                match job.status {
+                    TransferStatus::Running if transfer_details::waiting(s, &job.id) => {
+                        conflict = true
+                    }
+                    TransferStatus::Running => progressing = true,
+                    TransferStatus::Queued if !s.queue_paused => queued = true,
+                    _ => {}
+                }
+            }
+            done += u128::from(job.transferred_bytes.min(job.total_bytes));
+        } else if job.status == TransferStatus::Completed
+            && s.batch_ids
+                .get(&job.id)
+                .is_some_and(|batch| batches.contains(batch))
+        {
+            done += u128::from(job.total_bytes);
         } else {
-            s.batch_ids.get(&job.id) == latest_batch
+            continue;
         }
-    }) {
-        count += 1;
         total += u128::from(job.total_bytes);
-        let bytes = if job.status == TransferStatus::Completed {
-            job.total_bytes
-        } else {
-            job.transferred_bytes.min(job.total_bytes)
-        };
-        done += u128::from(bytes);
-        completed &= job.status == TransferStatus::Completed;
     }
-    let percent = if total > 0 {
-        100. * done as f32 / total as f32
-    } else if completed && count > 0 {
-        100.
+    let percent = (!unknown && total > 0).then(|| (done * 100 / total).min(99) as u8);
+    let phase = if progressing {
+        if percent.is_some() {
+            TransferPhase::Running
+        } else {
+            TransferPhase::Preparing
+        }
+    } else if conflict {
+        TransferPhase::Conflict
+    } else if queued {
+        TransferPhase::Preparing
     } else {
-        0.
+        TransferPhase::Paused
     };
-    (count, if active { percent.min(99.) } else { percent })
+    TransferIndicator {
+        phase,
+        active,
+        percent,
+    }
 }
 
 pub(crate) fn transfer_progress_buttons(ui: Ui) -> impl Widget {
     fn button(ui: Ui, direction: TransferDirection) -> impl Widget {
-        let state = ui.state;
-        when(
-            state.map(move |s| direction_progress(s, direction).0 > 0),
-            move || {
-                let open = ui.clone();
-                sapid::button()
-                    .class("transfer-progress-button")
-                    .name(i18n::bind(direction_label(direction)))
-                    .fill((
-                        icons::glyph(match direction {
-                            TransferDirection::Upload => Icon::Upload,
-                            TransferDirection::Download => Icon::Download,
-                        }),
-                        text().class("transfer-summary-track").content(""),
-                        text()
-                            .class("transfer-summary-fill")
-                            .style(state.map(move |s| {
-                                glory::style::Style::new().width(glory::style::Length::Percent(
-                                    direction_progress(s, direction).1 as f64,
-                                ))
-                            }))
-                            .content(""),
-                        text().class("transfer-summary-percent").content(
-                            state.map(move |s| {
-                                format!("{:.0}%", direction_progress(s, direction).1)
-                            }),
-                        ),
-                    ))
-                    .on_press(move || open.open_dialog(Dialog::TransferProgress(direction)))
-            },
-        )
+        widget(move |scope| {
+            let ui = ui.clone();
+            let summary = ui
+                .state
+                .map(move |s| direction_progress(s, direction))
+                .with_partial_eq();
+            let icon = match direction {
+                TransferDirection::Upload => Icon::Upload,
+                TransferDirection::Download => Icon::Download,
+            };
+            let name = scope.bond(move || {
+                let snapshot = summary.get();
+                let label = i18n::translate(direction_label(direction));
+                let status = i18n::translate(snapshot.phase.label());
+                let mut parts = vec![label];
+                if !status.is_empty() {
+                    parts.push(status);
+                }
+                if let Some(value) = snapshot.percent {
+                    parts.push(format!("{value}%"));
+                }
+                if snapshot.active > 1 {
+                    parts.push(i18n::translate(&format!("{} 个传输任务", snapshot.active)));
+                }
+                parts.join(" · ")
+            });
+            view()
+                .class(
+                    scope.bond(move || {
+                        format!("transfer-indicator {}", summary.get().phase.class())
+                    }),
+                )
+                .fill((
+                    sapid::ring_progress(
+                        scope.bond(move || f64::from(summary.get().percent.unwrap_or(0))),
+                    )
+                    .name(i18n::bind("传输进度"))
+                    .size(24.)
+                    .thickness(2.)
+                    .indeterminate(scope.bond(move || summary.get().percent.is_none()))
+                    .animated(scope.bond(move || summary.get().phase == TransferPhase::Preparing)),
+                    sapid::button()
+                        .class("icon-button transfer-progress-button")
+                        .name(name)
+                        .fill((
+                            icons::glyph(icon),
+                            text().class("transfer-count").content(scope.bond(move || {
+                                match summary.get().active {
+                                    0 | 1 => String::new(),
+                                    n if n > 9 => "9+".into(),
+                                    n => n.to_string(),
+                                }
+                            })),
+                        ))
+                        .on_press(move || ui.open_dialog(Dialog::TransferProgress(direction))),
+                ))
+                .show_in(scope)
+        })
     }
 
     row().class("desktop-transfers").fill((
@@ -975,4 +1086,41 @@ pub(crate) fn activity(ui: Ui) -> impl Widget {
                     }),
                 )),
         ))
+}
+
+#[cfg(test)]
+mod transfer_indicator_tests {
+    use super::*;
+
+    #[test]
+    fn concurrent_transfers_share_byte_progress_only_when_all_sizes_are_known() {
+        let mut s = State::new(AppConfig::default(), String::new(), String::new());
+        let direction = TransferDirection::Upload;
+        s.selected = Some("server".into());
+        let job = TransferJob {
+            id: "small".into(),
+            server_id: "server".into(),
+            local_path: "picture.png".into(),
+            remote_path: "/picture.png".into(),
+            direction,
+            status: TransferStatus::Running,
+            total_bytes: 100,
+            transferred_bytes: 50,
+        };
+        let mut large = job.clone();
+        large.id = "large".into();
+        large.total_bytes = 0;
+        large.transferred_bytes = 0;
+        enqueue_transfers(&mut s, vec![job, large]);
+        let summary = direction_progress(&s, direction);
+        assert_eq!(summary.active, 2);
+        assert!(summary.phase == TransferPhase::Preparing && summary.percent.is_none());
+        assert!(direction_progress(&s, TransferDirection::Download).phase == TransferPhase::Empty);
+        s.jobs[1].total_bytes = 900;
+        assert_eq!(direction_progress(&s, direction).percent, Some(5));
+        s.jobs[0].status = TransferStatus::Completed;
+        assert_eq!(direction_progress(&s, direction).percent, Some(10));
+        s.jobs[1].status = TransferStatus::Failed("disconnected".into());
+        assert!(direction_progress(&s, direction).phase == TransferPhase::Failed);
+    }
 }

@@ -9,6 +9,7 @@ use crate::*;
 pub(crate) enum Purpose {
     Video,
     Image,
+    Wallpaper,
     Pdf,
     Office,
     TextEditor,
@@ -30,6 +31,7 @@ impl Purpose {
         match self {
             Self::Video => "Open video",
             Self::Image => "Open image",
+            Self::Wallpaper => "Add Wallpaper",
             Self::Pdf => "Open PDF",
             Self::Office => "Open Office document",
             Self::SaveText(_) | Self::SaveOffice(_) => "Save as…",
@@ -52,6 +54,12 @@ impl Purpose {
                     arcnix_core::file_associations::extension(path).as_deref() == Some("pdf")
                 },
                 extensions: || vec!["pdf"],
+            },
+            Self::Wallpaper => Formats {
+                label: "All supported images",
+                empty: "No images in this folder.",
+                includes: arcnix_core::wallpaper_cache::supports,
+                extensions: || arcnix_core::wallpaper_cache::EXTENSIONS.to_vec(),
             },
             Self::Image => Formats {
                 label: "All supported images",
@@ -132,6 +140,7 @@ fn confirm(ui: &Ui, path: &str) {
         Purpose::SaveText(id) => return submit_save(ui, id, path),
         Purpose::Video => |ui, path| ui.player.open_from_picker(ui, path),
         Purpose::Image => image_viewer::open,
+        Purpose::Wallpaper => wallpaper_ui::select,
         Purpose::Pdf => pdf_reader::open,
         Purpose::Office => office_reader::open,
         Purpose::TextEditor => text_editor::open,
@@ -205,6 +214,7 @@ pub(crate) fn dialog(ui: Ui) -> impl Widget {
                                         "Replace"
                                     }
                                     Purpose::SaveText(_) | Purpose::SaveOffice(_) => "Save",
+                                    Purpose::Wallpaper => "Add Wallpaper",
                                     _ => "Open",
                                 }
                                 .to_owned()

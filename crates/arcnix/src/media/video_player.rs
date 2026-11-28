@@ -342,6 +342,7 @@ pub(crate) fn serve<Session, File: Read + Seek>(
 type CurrentSource = Arc<Mutex<Option<Arc<Source>>>>;
 pub(crate) struct Assets {
     pub player: CurrentSource,
+    pub wallpapers: PathBuf,
 }
 impl AssetProvider for Assets {
     fn get(&self, path: &str) -> Option<Arc<dyn AssetSource>> {
@@ -355,7 +356,7 @@ impl AssetProvider for Assets {
         {
             return Some(source.clone());
         }
-        None
+        wallpaper_ui::asset(&self.wallpapers, path)
     }
 }
 

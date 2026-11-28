@@ -12,6 +12,7 @@ pub(crate) mod linux_icon;
 pub(crate) mod server_apps_ui;
 pub(crate) mod server_apps_worker;
 pub(crate) mod server_desktop;
+pub(crate) mod wallpaper_ui;
 pub(crate) mod window_tabs;
 #[cfg(windows)]
 mod windows_shortcuts;

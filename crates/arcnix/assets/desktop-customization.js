@@ -24,7 +24,9 @@
     function updateWallpaper(desktop, epoch) {
         const art = desktop.querySelector('.desktop-wallpaper-art');
         if (!art) return;
-        const key = art.className + desktop.classList.contains('desktop-dark');
+        const source = desktop.querySelector('.desktop-wallpaper-source')?.textContent.trim() || '';
+        const custom = /^\/wallpaper-cache\/[a-f0-9]{64}\/[a-f0-9]{64}\/[a-f0-9]{64}\.(png|jpg|jpeg|webp|gif|bmp)$/.test(source) ? source : '';
+        const key = art.className + (custom || desktop.classList.contains('desktop-dark'));
         const previous = wallpapers.get(art);
         const reduced = reducedMotion.matches;
         if (previous?.key === key && previous.epoch === epoch && previous.reduced === reduced) return;
@@ -33,7 +35,15 @@
         const next = {key, epoch, reduced, background: style.background};
         wallpapers.set(art, next);
         if (!previous || previous.epoch !== epoch || reduced || previous.reduced) {
-            art.replaceChildren();
+            if (custom) {
+                const image = new Image();
+                image.alt = '';
+                image.className = 'desktop-wallpaper-image';
+                image.src = custom;
+                art.replaceChildren(image);
+            } else {
+                art.replaceChildren();
+            }
             return;
         }
         // The base already has the new CSS background. Keep the old frame opaque until decode finishes.
@@ -45,16 +55,16 @@
         }
         const image = new Image();
         image.alt = '';
-        image.className = 'wallpaper-transition-layer';
+        image.className = custom ? 'wallpaper-transition-layer desktop-wallpaper-image' : 'wallpaper-transition-layer';
         image.style.objectPosition = style.backgroundPosition;
-        image.src = style.backgroundImage.slice(5, -2); // Computed url("…") of a bundled wallpaper.
+        image.src = custom || style.backgroundImage.slice(5, -2);
         image.decode().then(async () => {
             if (!art.isConnected || wallpapers.get(art) !== next) return;
             art.append(image);
             await Promise.allSettled(image.getAnimations().map(animation => animation.finished));
             // A newer selection may already be fading in above this frame.
             while (image.previousElementSibling) image.previousElementSibling.remove();
-            if (wallpapers.get(art) === next) image.remove();
+            if (!custom && wallpapers.get(art) === next) image.remove();
         }).catch(() => {
             if (wallpapers.get(art) === next) art.replaceChildren();
         });

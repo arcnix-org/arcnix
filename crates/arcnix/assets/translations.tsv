@@ -2710,7 +2710,7 @@ Dock 时钟	Dock clock
 添加快捷键：{label}	Add shortcut: {label}
 移除快捷键	Remove shortcut
 已自定义	Customized
-重置快捷键：{label}（默认：{chord}）	Reset shortcut: {label} (Default: {chord})
+恢复快捷键：{label}（默认：{chord}）	Restore shortcut: {label} (Default: {chord})
 此快捷键已更改。	This shortcut has changed.
 关闭当前标签页	Close active tab
 复制文件	Copy files
@@ -3650,3 +3650,52 @@ Redis 密码无效	Invalid Redis password
 Redis 未配置明文端口或 Unix 套接字	Redis has no configured plaintext port or Unix socket
 此键已不存在或不再是字符串	This key no longer holds a string
 编辑期间键已变更，请重新加载后重试	The key changed during editing. Reload it and try again
+
+添加壁纸	Add Wallpaper
+自定义壁纸	Custom wallpaper
+正在加载壁纸…	Loading wallpaper…
+最多可添加 32 张壁纸。	You can add up to 32 wallpapers.
+无法加载这张壁纸。	Could not load this wallpaper.
+自定义壁纸：{}	Custom wallpaper: {}
+支持的壁纸格式：PNG、JPEG、WebP、GIF 和 BMP	Supported wallpaper formats: PNG, JPEG, WebP, GIF and BMP
+无法核对服务器上的壁纸内容	Could not check wallpaper content on the server
+壁纸在下载期间发生变化，请重试。	Wallpaper changed while downloading. Try again.
+无法解码这张壁纸	Could not decode this wallpaper
+恢复主题壁纸	Restore theme wallpaper
+移除壁纸	Remove wallpaper
+正在移除壁纸…	Removing wallpaper…
+无法清理壁纸缓存。	Could not remove cached wallpaper.
+恢复默认主题	Restore default theme
+恢复主题配色	Restore theme colors
+恢复主题图标	Restore theme icons
+恢复系统应用图标	Restore system app icons
+恢复默认桌面布局	Restore default desktop layout
+恢复默认桌面图标	Restore default desktop icons
+恢复启动器默认设置	Restore launcher defaults
+恢复程序坞默认布局	Restore default dock layout
+恢复窗口概览默认设置	Restore default window overview
+恢复程序坞默认图标	Restore default dock icons
+恢复状态栏默认设置	Restore status bar defaults
+跟随应用语言	Use application language
+恢复默认时间格式	Restore default time format
+使用应用的刷新间隔	Use application refresh interval
+恢复默认文件关联	Restore default file associations
+恢复此文件类型的默认应用	Restore default app for this file type
+恢复默认文件夹图标	Restore default folder icon
+恢复默认显示列	Restore default columns
+恢复更新默认设置	Restore update defaults
+恢复日期和时间默认格式	Restore date and time defaults
+恢复文件大小默认格式	Restore file size defaults
+恢复连接默认设置	Restore connection defaults
+恢复默认并发传输数	Restore default transfer limit
+恢复文件冲突默认处理方式	Restore file conflict defaults
+使用应用的传输默认设置	Use application transfer defaults
+恢复文件视图默认设置	Restore file view defaults
+恢复默认语言	Restore default language
+关闭诊断模式	Turn off diagnostics
+恢复隐藏文件默认设置	Restore hidden file defaults
+恢复默认刷新间隔	Restore default refresh interval
+恢复桌面默认快捷键	Restore default shortcuts for Desktop
+恢复终端默认快捷键	Restore default shortcuts for Terminal
+恢复文件管理默认快捷键	Restore default shortcuts for Files
+恢复代码编辑器默认快捷键	Restore default shortcuts for Code Editor

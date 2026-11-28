@@ -108,11 +108,11 @@ def main():
             button('Date & time').click()
             format_panel = panel.locator('.desktop-date-time')
             format_choices = format_panel.get_by_role('radiogroup', name='Time format')
-            reset = format_panel.get_by_role('button', name='Reset', exact=True)
+            restore_format = format_panel.get_by_role('button', name='Restore default time format', exact=True)
             def right_edge(control):
                 box = control.bounding_box()
                 return box['x'] + box['width']
-            assert abs(right_edge(format_choices) - right_edge(reset)) < 2
+            assert abs(right_edge(format_choices) - right_edge(restore_format)) < 2
             preview = panel.locator('.desktop-time-preview')
             expect(preview).to_have_attribute('title', 'Server time (UTC-07:00)')
             expect(zone).to_have_text('America/Phoenix')

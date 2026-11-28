@@ -31,7 +31,7 @@ def main():
     incoming.mkdir()
     destination.mkdir()
     source = incoming / 'drop 中文.txt'
-    payload = bytes(range(256)) * 2200
+    payload = bytes(range(256)) * 24576
     source.write_bytes(payload)
 
     with Peer(out / 'peer', io_delay=.012) as peer, Desktop(
@@ -58,6 +58,24 @@ def main():
         for label in ('Transfer files', 'Upload', 'Download'):
             expect(tools.get_by_role('button', name=label, exact=True)).to_have_count(0)
 
+        header = page.locator('.workspace-header .desktop-transfers')
+        upload = header.get_by_role('button', name=re.compile('^Upload details'))
+        download = header.get_by_role('button', name=re.compile('^Download details'))
+        expect(upload).to_be_hidden()
+        expect(download).to_be_hidden()
+
+        def expect_running(button):
+            ring = button.locator('..').get_by_role('progressbar')
+            expect(ring).to_be_visible()
+            expect(ring).to_have_attribute('aria-valuenow', re.compile(r'^[1-9]\d?$'))
+            expect(button).to_have_text('')
+            # The direction arrow is centered inside the actual painted ring.
+            arrow = button.locator('.action-glyph').bounding_box()
+            circle = ring.bounding_box()
+            for axis, size in [('x', 'width'), ('y', 'height')]:
+                assert circle[size] > arrow[size]
+                assert abs(circle[axis] + circle[size] / 2 - arrow[axis] - arrow[size] / 2) < 1
+
         box = pane.bounding_box()
         client = page.context.new_cdp_session(page)
         drop = dict(x=box['x'] + box['width'] / 2, y=box['y'] + box['height'] / 2,
@@ -66,8 +84,10 @@ def main():
             client.send('Input.dispatchDragEvent', dict(type=event, **drop))
         expect(pane).to_have_attribute('data-file-drop-target', 'true')
         client.send('Input.dispatchDragEvent', dict(type='drop', **drop))
-        upload = page.get_by_role('button', name='Upload details', exact=True)
-        expect(upload).to_contain_text('100%', timeout=20000)
+        expect_running(upload)
+        expect(download).to_be_hidden()
+        expect(upload).to_have_accessible_name('Upload details · Completed', timeout=25000)
+        expect(upload.locator('..').get_by_role('progressbar')).to_be_hidden()
         assert (peer.root / source.name).read_bytes() == payload
         upload.click()
         upload_dialog = page.get_by_role('dialog', name='Upload details', exact=True)
@@ -87,8 +107,8 @@ def main():
         expect(choose).to_contain_text('Choose an existing local directory.')
         folder.fill(str(destination))
         choose.get_by_role('button', name='Download', exact=True).click()
-        download = page.get_by_role('button', name='Download details', exact=True)
-        expect(download).to_be_visible()
+        expect_running(download)
+        header.screenshot(path=str(out / 'transfer-rings.png'))
         expect(upload).to_be_visible()
         download.click()
         dialog = page.get_by_role('dialog', name='Download details', exact=True)
@@ -97,6 +117,7 @@ def main():
         expect(job.locator('.job-percent')).to_have_text(re.compile(r"^(?!0\.0%|100\.0%)\d"))
         job.get_by_role('button', name='Pause transfer', exact=True).click()
         expect(job.locator('.job-status')).to_have_text('Paused')
+        expect(download.locator('..')).to_have_class(re.compile(r'\bpaused\b'))
         time.sleep(.45)
         before = job.locator('.job-percent').inner_text()
         time.sleep(.45)

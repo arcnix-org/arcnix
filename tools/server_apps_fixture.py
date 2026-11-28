@@ -108,11 +108,11 @@ def read_desktop_settings(legacy):
             continue
         value = load(path)
         if 'window' in value:
-            name = {'web_browser': 'browser', 'text_editor': 'editor'}.get(path.stem, path.stem)
+            name = 'editor' if path.stem == 'text_editor' else path.stem
             windows[name] = value['window']
         if path.stem in ('files', 'terminal'):
             prefs[path.stem] = value.get('settings', {})
-        elif path.stem == 'web_browser':
+        elif path.stem == 'browser':
             prefs['browser_bookmarks'] = value.get('settings', {}).get('bookmarks', [])
         elif path.stem == 'monitor':
             interval = value.get('settings', {}).get('resource_interval_seconds')

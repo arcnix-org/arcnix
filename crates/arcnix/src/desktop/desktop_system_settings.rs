@@ -110,7 +110,7 @@ pub(crate) fn time_zone_reply(ui: &Ui, result: std::result::Result<Reply, String
 pub(crate) fn region(ui: Ui) -> impl Widget {
     col().class("desktop-settings-pane desktop-region").fill((
         col().class("desktop-settings-card").fill((
-            settings::section_heading("Desktop language", true, settings::desktop_reset(&ui, |prefs| prefs.language = None)),
+            settings::section_heading("Desktop language", true, settings::restore_desktop_defaults(&ui, "Use application language", |prefs| prefs.language = None)),
             settings::select(&ui, true, "Desktop language",
                 [(Language::English, "English"), (Language::SimplifiedChinese, "简体中文")],
                 language, server_apps_ui::preferences_ready, |ui, lang| ui.change_desktop_language(lang)),
@@ -119,7 +119,7 @@ pub(crate) fn region(ui: Ui) -> impl Widget {
             )),
         )),
         col().class("desktop-settings-card").fill((
-            settings::section_heading("Numbers and file sizes", true, preferences_ui::file_sizes_reset(&ui, true)),
+            settings::section_heading("Numbers and file sizes", true, preferences_ui::restore_file_size_defaults(&ui, true)),
             preferences_ui::size_options(&ui, true),
         )),
         settings::feedback(&ui, |s| s.settings.error.clone(), "error"),
@@ -370,9 +370,11 @@ pub(crate) fn date_time(ui: Ui) -> impl Widget {
                     settings::section_heading(
                         "Time format",
                         true,
-                        settings::desktop_reset(&ui, |prefs| {
-                            prefs.clock.format = ClockFormat::default()
-                        }),
+                        settings::restore_desktop_defaults(
+                            &ui,
+                            "Restore default time format",
+                            |prefs| prefs.clock.format = ClockFormat::default(),
+                        ),
                     ),
                     row()
                         .class("desktop-setting-controls choice-list")
