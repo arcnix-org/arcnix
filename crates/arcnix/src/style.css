@@ -1382,10 +1382,15 @@ input,textarea,select{font:inherit}input{height:36px}textarea{line-height:1.6}
   display: flex; position: absolute; inset: auto 0 0; justify-content: space-around; padding: 4px;
   background: #101820b0; color: #fff; font-size: var(--font-small);
 }
-.theme-accent-controls, .theme-accent-options {
+.theme-accent-controls {
   display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0;
 }
 .theme-accent-controls { justify-content: flex-end; }
+.theme-accent-options {
+  display: grid !important; width: 100%; min-width: 0; padding-bottom: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(max(30px, calc((100% - 34px) / 18)), 1fr));
+  gap: 2px; justify-items: center;
+}
 .theme-custom-color { position: relative; display: flex; align-items: center; width: 9.25rem; max-width: 100%; }
 .theme-custom-color input[type=color] {
   display: block;

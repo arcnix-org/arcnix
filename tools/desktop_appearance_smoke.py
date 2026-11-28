@@ -331,6 +331,15 @@ def main():
             expect(grid.get_by_role('button', name='Trash', exact=True)).to_be_visible()
 
             button('Appearance').click()
+            swatches = panel.locator('.theme-accent-options button')
+            expect(swatches).to_have_count(36)
+            assert swatches.evaluate_all("""buttons => {
+                const bounds = buttons[0].parentElement.getBoundingClientRect();
+                const row = buttons.map(b => b.getBoundingClientRect()).filter(r => r.y === buttons[0].getBoundingClientRect().y);
+                const cell = bounds.width / row.length;
+                return row.length === 18 && new Set(buttons.map(b => b.offsetTop)).size === 2
+                    && bounds.right - row.at(-1).right < cell / 2;
+            }""")
             check_appearance_choices(panel)
             button('Aurora').click()
             expect(desktop).to_have_class('server-desktop theme-light desktop-light')
