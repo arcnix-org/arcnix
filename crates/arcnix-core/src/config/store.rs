@@ -38,6 +38,20 @@ impl ConfigStore {
         Ok(Self::at(super::paths::config_dir()?.join("config.json")))
     }
 
+    /// WebView2 profiles must be writable by the signed-in user, including for
+    /// all-users installations. Separate explicit configurations may run concurrently.
+    #[cfg(windows)]
+    pub fn webview_data_root(&self) -> Result<PathBuf> {
+        use sha2::{Digest, Sha256};
+        let root = super::paths::local_data_dir()?.join("WebView2");
+        let config = std::path::absolute(&self.path)?;
+        if config == Self::default_location()?.path {
+            return Ok(root);
+        }
+        let digest = Sha256::digest(config.as_os_str().as_encoded_bytes());
+        Ok(root.join("configs").join(format!("{digest:x}")))
+    }
+
     /// Called only for normal startup; explicit --config paths stay portable.
     pub fn migrate_default_location() -> Result<Self> {
         let store = Self::default_location()?;

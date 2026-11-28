@@ -444,6 +444,8 @@ impl State {
 
 #[derive(Clone)]
 struct Ui {
+    #[cfg(windows)]
+    webview_data_root: Rc<PathBuf>,
     player: video_player::Player,
     update_controller: Arc<updates_ui::Controller>,
     transfer_limiter: Arc<transfer_worker::Limiter>,
@@ -457,6 +459,11 @@ struct Ui {
     shell_focus: Cage<Option<glory::render::NodeId>>,
 }
 impl Ui {
+    #[cfg(windows)]
+    fn webview_context(&self, component: &str) -> wry::WebContext {
+        wry::WebContext::new(Some(self.webview_data_root.join(component)))
+    }
+
     fn apply_conflict_rule(
         &self,
         job_id: &str,
@@ -2475,6 +2482,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     i18n::desktop::init(scope, state);
     let (batch_events, batch_rx) = async_channel::bounded(128);
     let ui = Ui {
+        #[cfg(windows)]
+        webview_data_root: Rc::new(store.webview_data_root()?),
         player: video_player::Player::new(window.renderer().clone(), scope),
         update_controller,
         transfer_limiter: Default::default(),
@@ -2561,6 +2570,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     shell.run(
         window,
         Config {
+            #[cfg(windows)]
+            webview_data_directory: Some(ui.webview_data_root.join("shell")),
             native: Some(Box::new(app_icon::DesktopWindow::new(ui.clone()))),
             assets: arcnix_core::desktop_theme::BUNDLED_WALLPAPERS.iter()
             .map(|(name, bytes)| {

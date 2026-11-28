@@ -239,8 +239,7 @@ def main():
         for peer in (second, denied):
             trust = peer.config([], out)['config']['trusted_hosts']
             config['config']['trusted_hosts'].extend(trust)
-        # The copied binary has its own main WebView2 directory. Browser
-        # profiles must be resolved independently through runtime options.
+        # Let the application select separate shell and SSH browser profiles.
         with Desktop(out / 'desktop', config, binary=binary,
                      extra_env={'WEBVIEW2_USER_DATA_FOLDER': ''}) as app:
             page = app.page

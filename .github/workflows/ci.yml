@@ -80,3 +80,10 @@ jobs:
       - uses: ./.github/actions/windows-build-tools
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
+      - name: Start the GUI from a read-only Program Files directory
+        shell: pwsh
+        run: |
+          cargo build --locked -p arcnix --bin arcnix
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $targetDir = (cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).target_directory
+          python tools/windows_webview_startup.py (Join-Path $targetDir 'debug/arcnix.exe') --stage-under $env:ProgramFiles

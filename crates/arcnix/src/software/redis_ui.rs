@@ -2356,6 +2356,8 @@ mod tests {
         let (update_controller, _) = updates_ui::start()?;
         let (batch_events, _) = async_channel::bounded(16);
         let ui = Ui {
+            #[cfg(windows)]
+            webview_data_root: Rc::new(store.webview_data_root()?),
             player: video_player::Player::new(host_window.renderer().clone(), &scope),
             update_controller,
             transfer_limiter: Default::default(),

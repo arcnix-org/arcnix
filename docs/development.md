@@ -126,7 +126,9 @@ cargo run --locked -p arcnix --bin arcnix -- --config ./my-config.json
 
 默认配置存放在当前用户应用配置目录，可通过 `--config` 指定独立文件。配置保存站点、分组、主机指纹、私钥路径、上次本地目录，以及按服务器隔离的分栏比例和明确记忆的冲突规则，不保存密码、私钥口令或 sudo 密码。修改站点的地址、端口或用户名会清除原冲突规则。配置损坏时保留原文件并禁止覆盖。删除分组后，原有站点回到未分组。
 
-Windows 默认配置路径为 `%APPDATA%\Arcnix\config.json`，本地数据保存在 `%LOCALAPPDATA%\Arcnix`，播放器运行时缓存位于 `%LOCALAPPDATA%\Arcnix\cache\media`，均只使用产品目录，不再嵌套组织目录。macOS 使用 `~/Library/Application Support/Arcnix`，Linux 继续使用 XDG 下的 `arcnix` 目录。正常启动会迁移旧配置目录中的配置、日志、浏览器数据、壁纸缓存和更新文件；遇到同名文件冲突时保留双方数据并报告错误。配置格式保持版本 1，通过 `arcnix --config <path>` 指定的配置路径不会迁移。
+Windows 默认配置路径为 `%APPDATA%\Arcnix\config.json`，本地数据保存在 `%LOCALAPPDATA%\Arcnix`，播放器运行时缓存位于 `%LOCALAPPDATA%\Arcnix\cache\media`，均只使用产品目录，不再嵌套组织目录。macOS 使用 `~/Library/Application Support/Arcnix`，Linux 继续使用 XDG 下的 `arcnix` 目录。启动时优先读取新目录里的 `config.json`，完整保留仍存在的旧配置目录。仅在新配置缺失时迁移旧目录中的配置及相关数据，最后迁移配置文件。配置格式保持版本 1，通过 `arcnix --config <path>` 指定的配置路径不会迁移。
+
+Windows 主窗口的 WebView2 配置位于 `%LOCALAPPDATA%\Arcnix\WebView2\shell`。编辑器、Office、pgAdmin 和 HTML 预览使用各自的子目录。SSH 浏览器按连接身份隔离数据，首次打开时迁移该连接在当前配置旁原有的浏览器数据。`--config` 启动的实例按配置文件路径使用独立的 WebView2 目录。
 
 ## 远程文本编辑
 

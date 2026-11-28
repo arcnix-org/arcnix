@@ -361,7 +361,13 @@ impl Host {
         let started: Rc<RefCell<Vec<(String, Staged)>>> = Rc::default();
         let finished = started.clone();
         let completed_wake = wake.clone();
-        let web = WebViewBuilder::new()
+        #[cfg(not(windows))]
+        let builder = WebViewBuilder::new();
+        #[cfg(windows)]
+        let mut context = self.ui.webview_context("pgadmin");
+        #[cfg(windows)]
+        let builder = WebViewBuilder::new_with_web_context(&mut context);
+        let web = builder
             .with_visible(false)
             .with_focused(false)
             .with_incognito(true)

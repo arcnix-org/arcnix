@@ -118,13 +118,14 @@ struct HtmlView {
     viewport: Option<Viewport>,
 }
 
-fn html_child(window: &NativeWindow, source: Arc<str>) -> Result<WebView> {
+fn html_child(ui: &Ui, window: &NativeWindow, source: Arc<str>) -> Result<WebView> {
     const URL: &str = "http://arcnixpreview.localhost/index.html";
     // Remote HTML has neither the main shell's origin nor its IPC bridge.
     // A sandboxed response permits inline formatting while blocking scripts,
     // forms, frames, and network subresources.
     let started = std::cell::Cell::new(false);
-    let view = WebViewBuilder::new()
+    let mut context = ui.webview_context("preview");
+    let view = WebViewBuilder::new_with_web_context(&mut context)
         .with_visible(false)
         .with_focused(false)
         .with_incognito(true)
@@ -157,7 +158,6 @@ fn html_child(window: &NativeWindow, source: Arc<str>) -> Result<WebView> {
 
 pub(crate) struct Host {
     ui: Ui,
-    directory: PathBuf,
     session: Option<(u64, u16)>,
     context: Option<WebContext>,
     applied_dark: Option<bool>,
@@ -249,11 +249,9 @@ impl Events {
 
 impl Host {
     pub fn new(ui: Ui) -> Self {
-        let directory = ui.store.path().with_file_name("browser-data");
         let (tx, rx) = mpsc::channel();
         Self {
             ui,
-            directory,
             session: None,
             context: None,
             applied_dark: None,
@@ -579,7 +577,7 @@ impl Host {
                 .get(&id)
                 .is_none_or(|preview| preview.serial != serial)
             {
-                match html_child(window, source) {
+                match html_child(&self.ui, window, source) {
                     Ok(view) => {
                         self.html_preview.insert(
                             id,
@@ -650,7 +648,7 @@ impl Host {
             }
             self.session = Some((serial, port));
             self.cookie_profile = profile.filter(|profile| profile.scope == key);
-            self.context = Some(WebContext::new(Some(self.directory.join(key))));
+            self.context = Some(self.ui.webview_context(&format!("browser/{key}")));
         }
         self.views
             .retain(|id, _| state.with(|s| s.web_browser.tab(*id).is_some()));
@@ -742,6 +740,19 @@ impl Host {
                     .context
                     .as_mut()
                     .context("Browser profile is not ready")?;
+                let directory = context
+                    .data_directory()
+                    .context("Browser profile is missing")?;
+                let key = directory
+                    .file_name()
+                    .context("Browser profile key is missing")?;
+                let previous = self
+                    .ui
+                    .store
+                    .path()
+                    .with_file_name("browser-data")
+                    .join(key);
+                arcnix_core::paths::prepare_webview_profile(&previous, directory)?;
                 let view = child(window, context, environment, port, events.clone())?;
                 if !self.cookies_restored {
                     if let Some(profile) = &self.cookie_profile
