@@ -1,6 +1,5 @@
 """Launch the Windows GUI without a WebView2 folder override and verify its profile."""
 import argparse
-import csv
 import hashlib
 import json
 import os
@@ -64,8 +63,10 @@ def main():
     with tempfile.TemporaryDirectory(dir=args.stage_under.resolve(), prefix="arcnix-install-") as folder:
         app = Path(folder) / "arcnix.exe"
         shutil.copyfile(args.exe, app)
-        user = subprocess.check_output(["whoami", "/user", "/fo", "csv", "/nh"], text=True)
-        sid = "*" + next(csv.reader(user.splitlines()))[1]
+        sid = "*" + subprocess.check_output([
+            "powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+            "[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value"
+        ], text=True).strip()
         # Deny file/subdirectory creation even if the CI runner is an administrator.
         subprocess.run(["icacls", folder, "/deny", sid + ":(WD,AD)"], check=True)
         try:
