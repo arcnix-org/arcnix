@@ -33,6 +33,9 @@ jobs:
           - platform: macos-arm64
             runner: macos-15
             target: aarch64-apple-darwin
+          - platform: macos-amd64
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
           - platform: windows-amd64
             runner: windows-2025
             target: x86_64-pc-windows-msvc
@@ -94,7 +97,7 @@ jobs:
           fi
       - name: Test macOS disk image
         if: runner.os == 'macOS'
-        run: bash tools/macos_dmg_smoke.sh "dist/arcnix-$GITHUB_REF_NAME-macos-arm64.dmg" "$GITHUB_REF_NAME"
+        run: bash tools/macos_dmg_smoke.sh "dist/arcnix-$GITHUB_REF_NAME-${{ matrix.platform }}.dmg" "$GITHUB_REF_NAME"
       - name: Test Windows installer
         if: runner.os == 'Windows'
         shell: pwsh
@@ -132,11 +135,13 @@ jobs:
           stem="arcnix-$tag-windows-amd64"
           setup="$stem-setup.exe"
           portable="$stem.zip"
-          dmg="arcnix-$tag-macos-arm64.dmg"
+          apple_dmg="arcnix-$tag-macos-arm64.dmg"
+          intel_dmg="arcnix-$tag-macos-amd64.dmg"
           linux=("arcnix-$tag-linux-amd64.tar.gz" "arcnix-$tag-linux-arm64.tar.gz")
-          sha256sum "$setup" "$portable" "$dmg" "${linux[@]}" > SHA256SUMS
+          sha256sum "$setup" "$portable" "$apple_dmg" "$intel_dmg" "${linux[@]}" > SHA256SUMS
           assets=("$setup#Windows x64 installer ($tag)" "$portable#Windows x64 portable ZIP ($tag)"
-                  "$dmg#macOS Apple Silicon disk image ($tag)" "${linux[@]}" SHA256SUMS)
+                  "$apple_dmg#macOS Apple Silicon disk image ($tag)" "$intel_dmg#macOS Intel disk image ($tag)"
+                  "${linux[@]}" SHA256SUMS)
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" "${assets[@]}" --clobber
           else

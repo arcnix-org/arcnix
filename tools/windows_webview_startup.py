@@ -41,15 +41,19 @@ def launch(app):
             if process.poll() is None:
                 process.terminate()
             process.wait(timeout=15)
-            for attempt in range(40):
-                if not profile.exists():
-                    break
-                try:
-                    shutil.rmtree(profile)
-                except PermissionError:
-                    if attempt == 39:
-                        raise
-                    time.sleep(0.25)
+            remove_test_profile(profile)
+
+
+def remove_test_profile(profile):
+    # WebView2 child processes can remove, create or briefly lock cache files during shutdown.
+    deadline = time.monotonic() + 15
+    while profile.exists():
+        try:
+            shutil.rmtree(profile)
+        except OSError as error:
+            if error.winerror not in (2, 3, 5, 32, 33, 145) or time.monotonic() >= deadline:
+                raise
+            time.sleep(0.25)
 
 
 def main():

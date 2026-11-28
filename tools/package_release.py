@@ -14,6 +14,7 @@ from libmpv_runtime import stage as stage_libmpv
 ROOT = Path(__file__).resolve().parents[1]
 TARGETS = {
     "aarch64-apple-darwin": "macos-arm64",
+    "x86_64-apple-darwin": "macos-amd64",
     "x86_64-pc-windows-msvc": "windows-amd64",
     "aarch64-unknown-linux-gnu": "linux-arm64",
     "x86_64-unknown-linux-gnu": "linux-amd64",
@@ -106,7 +107,7 @@ def package(binary, target, tag, output, version):
         directory = Path(temporary)
         staging = directory / stem
         staging.mkdir()
-        if platform == "macos-arm64":
+        if target.endswith("-apple-darwin"):
             bundle = macos_bundle(binary, directory, version)
             shutil.move(str(bundle), staging / bundle.name)
         else:
@@ -123,7 +124,7 @@ def package(binary, target, tag, output, version):
         shutil.copytree(vendor / "workbench", staging / "LICENSES/workbench",
                         ignore=shutil.ignore_patterns("workbench.gz"))
         shutil.copy2(vendor / "README.md", staging / "LICENSES/README.md")
-        if platform == "macos-arm64":
+        if target.endswith("-apple-darwin"):
             archive = output / f"{stem}.dmg"
             macos_disk_image(staging, archive)
         elif platform == "windows-amd64":

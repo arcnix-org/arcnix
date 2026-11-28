@@ -20,7 +20,13 @@ mounted=1
 
 app="$mount_point/Arcnix.app"
 executable="$app/Contents/MacOS/arcnix"
+case "$(basename "$image")" in
+    "arcnix-$tag-macos-arm64.dmg") arch=arm64 ;;
+    "arcnix-$tag-macos-amd64.dmg") arch=x86_64 ;;
+    *) echo "Unexpected disk image name: $image" >&2; exit 1 ;;
+esac
 [[ $(readlink "$mount_point/Applications") == /Applications ]]
 [[ -f "$mount_point/LICENSE" && -x "$executable" ]]
+[[ $(lipo -archs "$executable") == "$arch" ]]
 codesign --verify --strict "$app"
 [[ $("$executable" --version) == "arcnix ${tag#v}" ]]
