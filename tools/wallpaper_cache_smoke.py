@@ -80,10 +80,10 @@ def main():
             assert restore_bounds['x'] + restore_bounds['width'] > bounds['x'] + bounds['width'] - 24
             previews = gallery.locator('.wallpaper-preview').evaluate_all(
                 'els => els.map(el => getComputedStyle(el).backgroundImage)')
-            assert all('/wallpapers/thumbnails/' in url for url in previews)
             themes = app.page.locator('.theme-wallpaper-swatch').evaluate_all(
                 'els => els.map(el => getComputedStyle(el).backgroundImage)')
-            assert themes and all('/wallpapers/thumbnails/' in url for url in themes)
+            assert previews and themes
+            assert all('/wallpapers/thumbnails/' in url and url.endswith('.webp")') for url in previews + themes)
             sizes = app.page.locator('.wallpaper-preview').evaluate_all("""async elements => Promise.all(elements.map(async el => {
                 const image = new Image();
                 image.src = getComputedStyle(el).backgroundImage.slice(5, -2);
@@ -103,17 +103,17 @@ def main():
             eventually(lambda: small.evaluate('el => el.complete && el.naturalWidth === 320 && el.naturalHeight === 180'))
             full_url = full.get_attribute('src')
             thumbnail_url = small.get_attribute('src')
-            assert full_url != thumbnail_url and '-thumb.png' in thumbnail_url
+            assert full_url != thumbnail_url and thumbnail_url.endswith('-thumb.webp')
             assert '/wallpaper-cache/' in full_url
             expect(gallery.locator('.custom-wallpaper-choice')).to_have_text('')
             eventually(lambda: read_desktop_settings(prefs).get('appearance', {}).get('wallpaper') == {'remote': '/custom 海岸.png'})
             cache = out / 'desktop/wallpaper-cache'
             digest = sha256(source.read_bytes()).hexdigest()
             cached_image = cache / f'{digest}.png'
-            cached_thumbnail = cache / f'{digest}-thumb.png'
+            cached_thumbnail = cache / f'{digest}-thumb.webp'
             assert cached_image.read_bytes() == source.read_bytes()
             with Image.open(cached_thumbnail) as preview:
-                assert preview.size == (320, 180)
+                assert preview.format == 'WEBP' and preview.size == (320, 180)
             stamp = cached_thumbnail.stat().st_mtime_ns
             gallery.get_by_role('button', name='Custom wallpaper: /custom 海岸.png', exact=True).click()
             expect(gallery.get_by_role('button', name='Add Wallpaper', exact=True)).to_be_enabled()
@@ -123,7 +123,7 @@ def main():
             expect(small).to_have_count(2)
             assert full.get_attribute('src') == full_url
             assert small.evaluate_all('els => els.map(el => el.getAttribute("src"))') == [thumbnail_url] * 2
-            assert list(cache.glob('*-thumb.png')) == [cached_thumbnail]
+            assert list(cache.glob('*-thumb.*')) == [cached_thumbnail]
             assert cached_thumbnail.stat().st_mtime_ns == stamp
             Image.new('RGB', (3840, 2160), '#915932').save(source)
             assert source.stat().st_size == original_size
@@ -141,7 +141,7 @@ def main():
             assert duplicate.is_file()
             digest = sha256(source.read_bytes()).hexdigest()
             cached_image = cache / f'{digest}.png'
-            cached_thumbnail = cache / f'{digest}-thumb.png'
+            cached_thumbnail = cache / f'{digest}-thumb.webp'
             choose(app, gallery, 'broken.png')
             expect(gallery.locator('.wallpaper-error')).not_to_have_text('')
             expect(gallery.locator('.custom-wallpaper-choice')).to_have_count(1)

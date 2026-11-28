@@ -44,7 +44,7 @@ fn checked_hash(value: &str) -> bool {
 fn asset_name(name: &str) -> Option<(&str, &'static str)> {
     let (stem, extension) = name.rsplit_once('.')?;
     let digest = stem.strip_suffix("-thumb").unwrap_or(stem);
-    if !checked_hash(digest) || (stem != digest && extension != "png") {
+    if !checked_hash(digest) || (stem != digest && extension != "webp") {
         return None;
     }
     let mime = match extension {
@@ -112,8 +112,14 @@ impl<'a> Cache<'a> {
             .collect();
         for entry in std::fs::read_dir(self.root)? {
             let entry = entry?;
-            if let Some((digest, _)) = entry.file_name().to_str().and_then(asset_name)
-                && !retained.contains(digest)
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else { continue };
+            let digest = asset_name(name).map(|(digest, _)| digest).or_else(|| {
+                // Earlier clients may still display a PNG preview while the original is in use.
+                name.strip_suffix("-thumb.png")
+                    .filter(|digest| checked_hash(digest))
+            });
+            if digest.is_some_and(|digest| !retained.contains(digest))
                 && !entry.file_type()?.is_dir()
             {
                 std::fs::remove_file(entry.path())?;
@@ -199,7 +205,7 @@ impl Request {
             &extension
         };
         let image_name = format!("{digest}.{extension}");
-        let thumbnail_name = format!("{digest}-thumb.png");
+        let thumbnail_name = format!("{digest}-thumb.webp");
         let image_path = self.root.join(&image_name);
         let thumbnail_path = self.root.join(&thumbnail_name);
         let result = Cached {
@@ -270,7 +276,7 @@ fn thumbnail(bytes: &[u8], extension: &str) -> Result<Vec<u8>> {
     let image = reader.decode().context("Could not decode this wallpaper")?;
     let image = image.resize_to_fill(320, 180, image::imageops::FilterType::Triangle);
     let mut output = Cursor::new(Vec::new());
-    image.write_to(&mut output, ImageFormat::Png)?;
+    image.write_to(&mut output, ImageFormat::WebP)?;
     Ok(output.into_inner())
 }
 
@@ -278,7 +284,7 @@ fn valid_thumbnail(path: &Path) -> bool {
     let Ok(bytes) = read_bounded(path) else {
         return false;
     };
-    let mut reader = ImageReader::with_format(Cursor::new(bytes), ImageFormat::Png);
+    let mut reader = ImageReader::with_format(Cursor::new(bytes), ImageFormat::WebP);
     let mut limits = image::Limits::default();
     limits.max_image_width = Some(320);
     limits.max_image_height = Some(180);
@@ -340,7 +346,9 @@ mod tests {
             || panic!("unchanged content must not download"),
         )?;
         assert_eq!(same.image, original.image);
-        let (_, small) = asset(root.path(), &original.thumbnail).unwrap();
+        let (mime, small) = asset(root.path(), &original.thumbnail).unwrap();
+        assert_eq!(mime, "image/webp");
+        assert_eq!(image::guess_format(&small)?, ImageFormat::WebP);
         let decoded = image::load_from_memory(&small)?;
         assert_eq!((decoded.width(), decoded.height()), (320, 180));
         let other = Request {
@@ -380,11 +388,17 @@ mod tests {
         let thumbnail_path = root
             .path()
             .join(cached.thumbnail.strip_prefix("/wallpaper-cache/").unwrap());
-        std::fs::write(thumbnail_path, b"broken")?;
+        let old_thumbnail = thumbnail_path.with_extension("png");
+        image::RgbaImage::new(320, 180).save(&old_thumbnail)?;
+        std::fs::copy(&old_thumbnail, &thumbnail_path)?;
         request.load(
             || Ok(hash(&bytes)),
             || panic!("repair the thumbnail from local cached content"),
         )?;
+        assert_eq!(
+            image::guess_format(&std::fs::read(thumbnail_path)?)?,
+            ImageFormat::WebP
+        );
         let image_path = root
             .path()
             .join(cached.image.strip_prefix("/wallpaper-cache/").unwrap());
@@ -416,6 +430,8 @@ mod tests {
             sources[&request.scope],
             BTreeMap::from([(request.path.clone(), hash(&bytes))])
         );
+        request.remove_cached()?;
+        assert!(!old_thumbnail.exists());
         let svg = Request {
             path: "/external.svg".into(),
             ..request
