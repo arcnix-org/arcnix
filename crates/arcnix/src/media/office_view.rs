@@ -189,11 +189,14 @@ impl View {
         let entry = if editing { "/edit" } else { "/document" };
         let url = format!("{ORIGIN}{entry}");
         let allowed = url.clone();
+        #[cfg(not(windows))]
         let builder = WebViewBuilder::new();
+        #[cfg(windows)]
+        let mut context = ui.webview_context("office");
         #[cfg(windows)]
         let builder = {
             use wry::WebViewBuilderExtWindows;
-            builder
+            WebViewBuilder::new_with_web_context(&mut context)
                 .with_browser_accelerator_keys(false)
                 .with_theme(theme.native())
         };

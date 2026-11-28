@@ -248,7 +248,13 @@ impl Host {
         let script = format!(
             "{script}\nwindow.addEventListener('contextmenu', event => event.preventDefault(), true);"
         );
-        let view = WebViewBuilder::new()
+        #[cfg(not(windows))]
+        let builder = WebViewBuilder::new();
+        #[cfg(windows)]
+        let mut context = self.ui.webview_context("code");
+        #[cfg(windows)]
+        let builder = WebViewBuilder::new_with_web_context(&mut context);
+        let view = builder
             .with_visible(false)
             .with_focused(false)
             .with_incognito(true)

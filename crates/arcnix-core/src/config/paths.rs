@@ -56,9 +56,81 @@ pub(crate) fn legacy_project() -> Result<ProjectDirs> {
         .context("Cannot find the previous application directory")
 }
 
+/// Adopt an existing SSH browser profile when that connection first opens.
+/// The UI starts independently of potentially locked browser files.
+#[cfg(windows)]
+pub fn prepare_webview_profile(previous: &Path, current: &Path) -> Result<()> {
+    if current.try_exists()? || !previous.try_exists()? {
+        return Ok(());
+    }
+    use std::os::windows::fs::MetadataExt;
+
+    use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
+    let metadata = fs::symlink_metadata(previous)?;
+    ensure!(
+        metadata.is_dir() && metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT == 0,
+        "Cannot migrate a linked or invalid browser profile"
+    );
+    let parent = current
+        .parent()
+        .context("Missing WebView2 profile directory")?;
+    fs::create_dir_all(parent)?;
+    match fs::rename(previous, current) {
+        Ok(()) => Ok(()),
+        Err(_) if current.is_dir() => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::CrossesDevices => {
+            // Roaming AppData or a portable configuration can be on a different volume.
+            // Publish only a complete copy; other sessions may be opening the same profile.
+            let staged = tempfile::tempdir_in(parent)?;
+            copy_profile(previous, staged.path())?;
+            match fs::rename(staged.path(), current) {
+                Ok(()) => Ok(()),
+                Err(_) if current.is_dir() => Ok(()),
+                Err(error) => Err(error.into()),
+            }
+        }
+        Err(error) => Err(error).with_context(|| {
+            format!(
+                "Cannot move browser profile from {} to {}",
+                previous.display(),
+                current.display()
+            )
+        }),
+    }
+}
+
+#[cfg(windows)]
+fn copy_profile(source: &Path, destination: &Path) -> Result<()> {
+    use std::os::windows::fs::MetadataExt;
+
+    use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let to = destination.join(entry.file_name());
+        let metadata = fs::symlink_metadata(entry.path())?;
+        // Never traverse links or Windows junctions in the cached profile.
+        ensure!(
+            metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT == 0,
+            "Cannot copy a linked browser profile entry"
+        );
+        if metadata.is_dir() {
+            fs::create_dir(&to)?;
+            copy_profile(&entry.path(), &to)?;
+        } else {
+            fs::copy(entry.path(), to)?;
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn migrate_config(target: &Path) -> Result<()> {
     let legacy = legacy_project()?;
-    if legacy.config_dir() == target || !legacy.config_dir().try_exists()? {
+    migrate_config_from(legacy.config_dir(), target)
+}
+
+fn migrate_config_from(source: &Path, target: &Path) -> Result<()> {
+    let config = target.join("config.json");
+    if config.try_exists()? || source == target || !source.try_exists()? {
         return Ok(());
     }
     fs::create_dir_all(target)?;
@@ -69,8 +141,10 @@ pub(crate) fn migrate_config(target: &Path) -> Result<()> {
         .truncate(false)
         .open(target.join(".directory-migration.lock"))?;
     lock.lock()?;
-    move_contents(legacy.config_dir(), target)?;
-    remove_empty_parents(legacy.config_dir().parent(), target.parent());
+    if !config.try_exists()? {
+        move_contents(source, target)?;
+        remove_empty_parents(source.parent(), target.parent());
+    }
     Ok(())
 }
 
@@ -83,6 +157,9 @@ fn move_contents(source: &Path, target: &Path) -> Result<()> {
     let mut moves = Vec::new();
     plan_moves(source, target, &mut moves)?;
     create_directories(source, target)?;
+    // Publish the active configuration last so an interrupted migration can resume.
+    let config = target.join("config.json");
+    moves.sort_by_key(|(_, destination)| destination == &config);
     for (source, target) in moves {
         fs::create_dir_all(target.parent().context("Missing destination directory")?)?;
         fs::rename(&source, &target).with_context(|| {
@@ -175,8 +252,8 @@ mod tests {
         fs::write(source.join("browser-data/profile/cookies"), b"cookies").unwrap();
         fs::create_dir_all(target.join("browser-data/profile")).unwrap();
         fs::write(target.join("browser-data/profile/already-moved"), b"kept").unwrap();
-        move_contents(&source, &target).unwrap();
-        move_contents(&source, &target).unwrap();
+        migrate_config_from(&source, &target).unwrap();
+        migrate_config_from(&source, &target).unwrap();
         assert_eq!(
             fs::read(target.join("config.json")).unwrap(),
             b"saved config"
@@ -194,7 +271,7 @@ mod tests {
     }
 
     #[test]
-    fn migration_refuses_conflicts_before_moving_any_files() {
+    fn existing_configuration_wins_without_touching_the_previous_tree() {
         let temp = tempfile::tempdir().unwrap();
         let source = temp.path().join("old");
         let target = temp.path().join("new");
@@ -203,11 +280,12 @@ mod tests {
         fs::write(source.join("config.json"), b"old").unwrap();
         fs::write(source.join("other.json"), b"other").unwrap();
         fs::write(target.join("config.json"), b"new").unwrap();
-        assert!(move_contents(&source, &target).is_err());
+        migrate_config_from(&source, &target).unwrap();
         assert_eq!(fs::read(source.join("config.json")).unwrap(), b"old");
         assert_eq!(fs::read(target.join("config.json")).unwrap(), b"new");
         assert!(source.join("other.json").exists());
         assert!(!target.join("other.json").exists());
+        assert!(!target.join(".directory-migration.lock").exists());
     }
 
     #[test]
@@ -228,6 +306,49 @@ mod tests {
                 local_data_dir().unwrap(),
                 base.data_local_dir().join("Arcnix")
             );
+            assert_eq!(
+                crate::store::ConfigStore::default_location()
+                    .unwrap()
+                    .webview_data_root()
+                    .unwrap(),
+                base.data_local_dir().join("Arcnix/WebView2")
+            );
         }
+    }
+
+    #[test]
+    fn interrupted_migration_preserves_conflicting_auxiliary_data() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let source = temp.path().join("old");
+        let target = temp.path().join("new");
+        fs::create_dir_all(&source)?;
+        fs::create_dir_all(&target)?;
+        fs::write(source.join("config.json"), b"active")?;
+        fs::write(source.join("config.tasks.json"), b"old tasks")?;
+        fs::write(target.join("config.tasks.json"), b"new tasks")?;
+        assert!(migrate_config_from(&source, &target).is_err());
+        assert!(!target.join("config.json").exists());
+        assert_eq!(fs::read(source.join("config.json"))?, b"active");
+        assert_eq!(fs::read(source.join("config.tasks.json"))?, b"old tasks");
+        assert_eq!(fs::read(target.join("config.tasks.json"))?, b"new tasks");
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn ssh_profile_migrates_once_and_keeps_a_recreated_old_profile() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let old = temp.path().join("browser-data/server");
+        let new = temp.path().join("WebView2/browser/server");
+        fs::create_dir_all(&old)?;
+        fs::write(old.join("Local State"), b"active")?;
+        prepare_webview_profile(&old, &new)?;
+        assert_eq!(fs::read(new.join("Local State"))?, b"active");
+        fs::create_dir_all(&old)?;
+        fs::write(old.join("Local State"), b"older client")?;
+        prepare_webview_profile(&old, &new)?;
+        assert_eq!(fs::read(new.join("Local State"))?, b"active");
+        assert_eq!(fs::read(old.join("Local State"))?, b"older client");
+        Ok(())
     }
 }

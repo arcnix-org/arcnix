@@ -55,6 +55,8 @@ try {
     if ((& $app --version | Out-String).Trim() -ne "arcnix $version" -or $LASTEXITCODE -ne 0) {
         throw 'The installed application did not report the expected version.'
     }
+    python "$PSScriptRoot/windows_webview_startup.py" $app
+    if ($LASTEXITCODE -ne 0) { throw 'The installed desktop window did not start.' }
 } finally {
     if (Test-Path -LiteralPath $uninstaller) {
         $process = Start-Process -FilePath $uninstaller -ArgumentList $silent -WindowStyle Hidden -Wait -PassThru

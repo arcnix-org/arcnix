@@ -17,6 +17,8 @@ serde_json = "1"
 arcnix-core = { version = "0.3.13", path = "crates/arcnix-core" }
 
 [patch.crates-io]
+# Glory 0.9.1 with an optional data directory for the shell WebView.
+glory-wry = { path = "vendor/glory-wry" }
 # Read SFTP entry names as wire bytes before deciding which can be displayed.
 ssh2 = { path = "vendor/ssh2" }
 # Keep the parent resize handler when a child closes.

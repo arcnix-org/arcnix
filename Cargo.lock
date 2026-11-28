@@ -1714,8 +1714,6 @@ dependencies = [
 [[package]]
 name = "glory-wry"
 version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c5d85e6f2c8d774974963300793dee0b77c269e84f6dee69438068355dd1d4f"
 dependencies = [
  "glory-core",
  "glory-html",

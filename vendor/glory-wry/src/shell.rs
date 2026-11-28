@@ -74,6 +74,8 @@ pub use tao::{
     window::Fullscreen,
 };
 pub struct Config {
+    /// Optional profile directory for the main WebView only.
+    pub webview_data_directory: Option<std::path::PathBuf>,
     /// No tray, startup registration, updater, or platform hooks by default.
     pub native: Option<Box<dyn NativeLifecycle>>,
     pub title: String,
@@ -91,6 +93,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            webview_data_directory: None,
             native: None,
             title: "Glory".into(),
             browser: None,
@@ -265,7 +268,14 @@ impl Shell {
             "default-src 'none'; script-src 'none'; style-src 'unsafe-inline' glory: http://glory.localhost; img-src glory: http://glory.localhost data:{preview_policy}; font-src glory: http://glory.localhost; base-uri 'none'; frame-src 'none'; form-action 'none'{media_policy}"
         );
         let asset_pool = config.asset_provider.map(assets::Pool::new).transpose()?;
-        let builder = WebViewBuilder::new()
+        let mut context = config
+            .webview_data_directory
+            .map(|dir| wry::WebContext::new(Some(dir)));
+        let builder = match context.as_mut() {
+            Some(context) => WebViewBuilder::new_with_web_context(context),
+            None => WebViewBuilder::new(),
+        };
+        let builder = builder
             .with_asynchronous_custom_protocol("glory".into(), move |_, request, responder| {
                 let path = request.uri().path();
                 if request

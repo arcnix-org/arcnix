@@ -103,8 +103,7 @@ class Desktop:
         self.binary = binary or executable(); self.extra_env = extra_env or {}
         self.preview_run = preview_run_directory(out)
         if self.preview_run and not Path(self.binary).resolve().is_relative_to(self.preview_run):
-            # WebView2 derives the default UI profile from the executable path.
-            # Copies let concurrent previews of one build use independent profiles.
+            # Keep the preview executable and sidecar together for the lifetime of the run.
             source = Path(self.binary)
             directory = Path(tempfile.mkdtemp(prefix='runtime-', dir=self.out))
             self.binary = Path(shutil.copy2(source, directory / source.name))
