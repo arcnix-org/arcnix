@@ -9,7 +9,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail, ensure};
-use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
@@ -85,9 +84,11 @@ pub fn base(store: &ConfigStore) -> Result<PathBuf> {
     if store.path() != ConfigStore::default_location()?.path() {
         return app_directory(&root, &root);
     }
-    let project = ProjectDirs::from("org", "arcnix", "Arcnix")
-        .context("Cannot find the application data directory")?;
-    app_directory(&root, project.data_local_dir())
+    // On macOS the configuration migration also moves components into this root.
+    app_directory(&root, &root)?;
+    // The organization directory is consulted only to import older installations.
+    let legacy = crate::paths::legacy_project()?;
+    app_directory(&root, legacy.data_local_dir())
 }
 
 fn app_directory(root: &Path, legacy_root: &Path) -> Result<PathBuf> {

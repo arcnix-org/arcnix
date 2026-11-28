@@ -8,7 +8,6 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, ensure};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD_NO_PAD;
-use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 
 use crate::{AppConfig, AuthMethod, ServerGroup, ServerProfile, TrustedHost, new_id};
@@ -36,9 +35,19 @@ pub struct StartupConfig {
 
 impl ConfigStore {
     pub fn default_location() -> Result<Self> {
-        let dirs = ProjectDirs::from("org", "arcnix", "Arcnix")
-            .context("无法确定配置目录；请提供配置文件路径")?;
-        Ok(Self::at(dirs.config_dir().join("config.json")))
+        Ok(Self::at(super::paths::config_dir()?.join("config.json")))
+    }
+
+    /// Called only for normal startup; explicit --config paths stay portable.
+    pub fn migrate_default_location() -> Result<Self> {
+        let store = Self::default_location()?;
+        super::paths::migrate_config(
+            store
+                .path
+                .parent()
+                .context("Missing configuration directory")?,
+        )?;
+        Ok(store)
     }
 
     /// Local application data follows the configuration for portable installs.
@@ -50,20 +59,7 @@ impl ConfigStore {
                 .context("Configuration directory is unavailable")?
                 .to_owned());
         }
-        #[cfg(windows)]
-        {
-            Ok(directories::BaseDirs::new()
-                .context("Cannot find the local application data directory")?
-                .data_local_dir()
-                .join("Arcnix"))
-        }
-        #[cfg(not(windows))]
-        {
-            Ok(ProjectDirs::from("org", "arcnix", "Arcnix")
-                .context("Cannot find the application data directory")?
-                .data_local_dir()
-                .to_owned())
-        }
+        super::paths::local_data_dir()
     }
 
     /// A real SSH session writes its Linux user data under ~/.arcnix. Keep

@@ -126,7 +126,7 @@ cargo run --locked -p arcnix --bin arcnix -- --config ./my-config.json
 
 默认配置存放在当前用户应用配置目录，可通过 `--config` 指定独立文件。配置保存站点、分组、主机指纹、私钥路径、上次本地目录，以及按服务器隔离的分栏比例和明确记忆的冲突规则，不保存密码、私钥口令或 sudo 密码。修改站点的地址、端口或用户名会清除原冲突规则。配置损坏时保留原文件并禁止覆盖。删除分组后，原有站点回到未分组。
 
-Windows 默认配置路径为 `%APPDATA%\arcnix\Arcnix\config\config.json`。配置格式保持版本 1，已有配置文件可以复制到该位置，或通过 `arcnix --config <path>` 直接使用。
+Windows 默认配置路径为 `%APPDATA%\Arcnix\config.json`，本地数据保存在 `%LOCALAPPDATA%\Arcnix`，播放器运行时缓存位于 `%LOCALAPPDATA%\Arcnix\cache\media`，均只使用产品目录，不再嵌套组织目录。macOS 使用 `~/Library/Application Support/Arcnix`，Linux 继续使用 XDG 下的 `arcnix` 目录。正常启动会迁移旧配置目录中的配置、日志、浏览器数据、壁纸缓存和更新文件；遇到同名文件冲突时保留双方数据并报告错误。配置格式保持版本 1，通过 `arcnix --config <path>` 指定的配置路径不会迁移。
 
 ## 远程文本编辑
 

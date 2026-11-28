@@ -2415,7 +2415,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let store = Rc::new(if let Some(path) = config_path {
         ConfigStore::at(path)
     } else {
-        ConfigStore::default_location()?
+        ConfigStore::migrate_default_location()?
     });
     if let Some(path) = &health_marker {
         let root = std::fs::canonicalize(
