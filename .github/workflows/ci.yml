@@ -66,6 +66,36 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
 
+  macos-intel:
+    name: Intel Mac disk image
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    runs-on: macos-15-intel
+    timeout-minutes: 60
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '13.0'
+      TARGET: x86_64-apple-darwin
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: 1.100.0
+          targets: x86_64-apple-darwin
+      - uses: ./.github/actions/cargo-cache
+      - run: cargo test --workspace --locked --target "$TARGET"
+      - run: cargo build --release --locked --target "$TARGET" -p arcnix --bin arcnix
+      - name: Package and verify the Intel disk image
+        run: |
+          tag=$(cargo metadata --no-deps --format-version 1 | jq -er '.packages[] | select(.name == "arcnix") | "v" + .version')
+          python3 tools/package_release.py --target "$TARGET" --tag "$tag"
+          bash tools/macos_dmg_smoke.sh "dist/arcnix-$tag-macos-amd64.dmg" "$tag"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: arcnix-macos-amd64
+          path: dist/*-macos-amd64.dmg
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
   windows:
     name: Desktop (Windows, Rust 1.100)
     runs-on: windows-2025

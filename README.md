@@ -12,6 +12,7 @@ Arcnix is a desktop app for managing Linux servers over SSH. The interface runs 
 - **Tasks and backups.** Review scripts across hosts, check the results of server-owned tasks and restore files from restic snapshots.
 
 Desktop downloads are available for Windows x64, macOS on Apple Silicon, and Linux x64 and ARM64.
+For Intel Macs, download the `arcnix-macos-amd64` artifact from a successful [CI run](https://github.com/arcnix-org/arcnix/actions/workflows/ci.yml).
 
 ## Try the local desktop
 

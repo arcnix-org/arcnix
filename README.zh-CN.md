@@ -12,6 +12,7 @@
 - **任务与备份**　在多台服务器上审核并运行脚本，查询已提交任务的结果，从 restic 快照恢复文件。
 
 客户端提供 Windows x64、macOS Apple Silicon，以及 Linux x64 和 ARM64 下载包。
+Intel Mac 用户可从通过的 [CI 运行记录](https://github.com/arcnix-org/arcnix/actions/workflows/ci.yml)下载 `arcnix-macos-amd64` 测试包。
 
 ## 体验本机桌面
 
